@@ -2,6 +2,24 @@
 
 A Go tool for adding functionality plugins to devcontainer setups — supports both [Sandcat](https://github.com/VirtusLab/sandcat) and [Anthropic Claude Code](https://github.com/anthropics/claude-code) devcontainers.
 
+## Quick Example
+
+Add tmux with full color support and a custom config to your devcontainer in one command:
+
+```bash
+$ sandcutter apply .devcontainer tmux
+
+✓ Merged 3 apt packages into Dockerfile
+✓ Added locale configuration
+✓ Copied tmux.conf → .devcontainer/tmux.conf
+✓ Added TERM=xterm-256color to compose environment
+✓ Plugin 'tmux' applied successfully
+
+# That's it — rebuild your container and tmux is ready to go.
+```
+
+No manual Dockerfile editing. No hunting for the right apt packages. No figuring out where to insert `COPY` lines. Sandcutter handles the plumbing — you just pick the plugins.
+
 ## What is Sandcutter?
 
 Sandcutter allows you to enhance development containers by applying pre-configured plugins that modify the Dockerfile and (optionally) docker-compose configuration. Each plugin can install packages, configure fonts and locales, copy configuration files, and set environment variables.

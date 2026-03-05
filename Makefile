@@ -1,4 +1,4 @@
-.PHONY: all build test test-verbose clean install help
+.PHONY: all build test test-verbose clean install lint sec secrets check help
 
 # Binary name
 BINARY=sandcutter
@@ -77,16 +77,22 @@ vet:
 	@$(GOCMD) vet ./...
 	@echo "✓ Vet complete"
 
-## lint: Run static analysis (requires golangci-lint)
+## lint: Run static analysis
 lint:
-	@echo "Running linters..."
-	@if command -v golangci-lint > /dev/null; then \
-		golangci-lint run ./...; \
-		echo "✓ Lint complete"; \
-	else \
-		echo "⚠ golangci-lint not installed, skipping"; \
-		echo "Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
-	fi
+	go vet ./...
+	go tool staticcheck ./...
+	go tool golangci-lint run ./...
+	go tool nilaway ./...
+	go tool gocyclo -over 15 .
+
+## sec: Run security checks
+sec:
+	go tool gosec ./...
+	go tool govulncheck ./...
+
+## secrets: Scan for leaked secrets
+secrets:
+	go tool gitleaks git -v
 
 ## integration-test: Run integration tests with fresh sandcat
 integration-test: build
@@ -94,16 +100,15 @@ integration-test: build
 	@./test.sh
 	@echo "✓ Integration tests passed"
 
-## check: Run all checks (fmt, vet, test)
-check: fmt vet test
-	@echo "✓ All checks passed"
+## check: Run all checks (lint, sec, secrets)
+check: lint sec secrets
 
 ## help: Show this help message
 help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@sed -n 's/^##//p' $(MAKEFILE_LIST) | column -t -s ':' | sed -e 's/^/ /'
+	@awk '/^##/ { sub(/^## */, ""); split($$0, a, ": *"); printf "  %-20s %s\n", a[1], a[2] }' $(MAKEFILE_LIST)
 
 # Default target
 .DEFAULT_GOAL := help
