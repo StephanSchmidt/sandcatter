@@ -70,20 +70,10 @@ Sandcutter includes built-in plugins that are embedded in the binary, and suppor
 
 ### Built-in Plugins
 
-#### tmux (built-in)
-
-Terminal multiplexer with 256-color support, mouse integration, and custom keybindings.
-
-**Features:**
-- Installs tmux and required fonts (DejaVu, Liberation, Noto)
-- Configures UTF-8 locale support
-- Sets up 256-color and true color terminal support
-- Custom keybindings for intuitive pane splitting
-- Mouse support for scrolling and pane selection
-- Status bar with custom styling
-- 10,000 line scrollback buffer
-
-**Configuration File:** `.devcontainer/tmux.conf`
+| Plugin | Description |
+|--------|-------------|
+| **tmux** | Terminal multiplexer with 256-color/true color support, mouse integration, custom keybindings, and fonts. Config: `.devcontainer/tmux.conf` |
+| **claude-tools** | Installs Homebrew and development tools (build-essential, procps) for Claude Code containers. Sets up PATH for linuxbrew. |
 
 ### User Plugins
 
