@@ -221,7 +221,11 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 			}
 			composeName := filepath.Base(a.ComposePath)
 			fmt.Println("\nRun:")
-			fmt.Printf("  cd %s && %s -f .devcontainer/%s run --rm --build app\n", a.TargetDir, composeCmd, composeName)
+			if a.TargetDir != "." {
+				fmt.Printf("  cd %s && %s -f .devcontainer/%s run --rm --build app\n", a.TargetDir, composeCmd, composeName)
+			} else {
+				fmt.Printf("  %s -f .devcontainer/%s run --rm --build app\n", composeCmd, composeName)
+			}
 		}
 	}
 
