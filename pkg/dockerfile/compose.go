@@ -198,6 +198,72 @@ func (c *ComposeFile) AddEnvironmentVariables(envVars map[string]string) error {
 	return nil
 }
 
+// SetComposeCommand sets the command for the app service
+func (c *ComposeFile) SetComposeCommand(command string) error {
+	if command == "" {
+		return nil
+	}
+
+	inAppService := false
+	appServiceIdx := -1
+	commandIdx := -1
+	appIndent := ""
+
+	for i, line := range c.Lines {
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "app:") {
+			inAppService = true
+			appServiceIdx = i
+			continue
+		}
+
+		// Left the app service (new top-level service key)
+		if inAppService && len(trimmed) > 0 && !strings.HasPrefix(line, " ") && strings.Contains(trimmed, ":") {
+			inAppService = false
+			break
+		}
+
+		if inAppService && strings.HasPrefix(trimmed, "command:") {
+			commandIdx = i
+			indent := len(line) - len(strings.TrimLeft(line, " "))
+			appIndent = strings.Repeat(" ", indent)
+			break
+		}
+	}
+
+	if appServiceIdx == -1 {
+		return fmt.Errorf("could not find app service in compose file")
+	}
+
+	newLine := appIndent + "command: " + command
+	if appIndent == "" {
+		newLine = "    command: " + command
+	}
+
+	if commandIdx != -1 {
+		// Check if already set to desired value
+		if strings.TrimSpace(c.Lines[commandIdx]) == "command: "+command {
+			return nil
+		}
+		c.Lines[commandIdx] = newLine
+	} else {
+		// Insert command line at end of app service
+		insertIdx := appServiceIdx + 1
+		for i := appServiceIdx + 1; i < len(c.Lines); i++ {
+			line := c.Lines[i]
+			trimmed := strings.TrimSpace(line)
+			if len(trimmed) > 0 && !strings.HasPrefix(line, " ") && strings.Contains(trimmed, ":") {
+				break
+			}
+			insertIdx = i + 1
+		}
+		c.Lines = append(c.Lines[:insertIdx], append([]string{newLine}, c.Lines[insertIdx:]...)...)
+	}
+
+	return nil
+}
+
 // GetContent returns the compose file content as a string
 func (c *ComposeFile) GetContent() string {
 	return strings.Join(c.Lines, "\n") + "\n"

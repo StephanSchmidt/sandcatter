@@ -3,6 +3,7 @@ package plugin
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/StephanSchmidt/sandcatter/pkg/dockerfile"
@@ -36,6 +37,18 @@ func NewApplier(targetDir, pluginsDir string) (*Applier, error) {
 		ComposePath:    composePath,
 		PluginsDir:     pluginsDir,
 	}, nil
+}
+
+// detectComposeCommand returns "docker compose" if the plugin is available,
+// otherwise falls back to "docker-compose". Returns an error if neither is found.
+func detectComposeCommand() (string, error) {
+	if err := exec.Command("docker", "compose", "version").Run(); err == nil {
+		return "docker compose", nil
+	}
+	if _, err := exec.LookPath("docker-compose"); err == nil {
+		return "docker-compose", nil
+	}
+	return "", fmt.Errorf("docker compose is not installed; install Docker Compose (https://docs.docker.com/compose/install/) and try again")
 }
 
 // Apply applies a plugin to the target sandcat installation
@@ -124,6 +137,14 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 		}
 	}
 
+	// Apply compose command
+	if plugin.ComposeCommand != "" {
+		fmt.Printf("Setting compose command: %s\n", plugin.ComposeCommand)
+		if err := compose.SetComposeCommand(plugin.ComposeCommand); err != nil {
+			return fmt.Errorf("failed to set compose command: %w", err)
+		}
+	}
+
 	// Save changes
 	if dryRun {
 		fmt.Println("\n--- DRY RUN: Dockerfile.app changes ---")
@@ -141,13 +162,13 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 		}
 
 		fmt.Println("\n✓ Plugin applied successfully!")
-		fmt.Println("\nNext steps:")
-		fmt.Printf("  1. Review the changes in %s\n", a.DockerfilePath)
-		fmt.Printf("  2. Review the changes in %s\n", a.ComposePath)
-		fmt.Println("  3. Rebuild your container:")
-		fmt.Printf("     cd %s\n", a.TargetDir)
-		fmt.Println("     docker compose -f .devcontainer/compose-all.yml build")
 		fmt.Println("\nBackups saved with .backup extension")
+		composeCmd, err := detectComposeCommand()
+		if err != nil {
+			return err
+		}
+		fmt.Println("\nRun:")
+		fmt.Printf("  cd %s && %s -f .devcontainer/compose-all.yml run --rm --build app\n", a.TargetDir, composeCmd)
 	}
 
 	return nil

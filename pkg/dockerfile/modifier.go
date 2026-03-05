@@ -3,7 +3,6 @@ package dockerfile
 import (
 	"bufio"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/afero"
@@ -266,7 +265,7 @@ func (d *Dockerfile) AddLocaleSetup(locale string) error {
 
 // AddCopyCommand adds a COPY command for a file
 func (d *Dockerfile) AddCopyCommand(source, destination, chmod string) error {
-	marker := fmt.Sprintf("# sandcutter:file:%s", filepath.Base(destination))
+	marker := fmt.Sprintf("# sandcutter:file:%s", destination)
 
 	// Check if already exists
 	for _, line := range d.Lines {
@@ -287,9 +286,9 @@ func (d *Dockerfile) AddCopyCommand(source, destination, chmod string) error {
 	// Build COPY command
 	var copyCmd string
 	if chmod != "" {
-		copyCmd = fmt.Sprintf("COPY --chmod=%s %s %s %s", chmod, source, destination, marker)
+		copyCmd = fmt.Sprintf("%s\nCOPY --chmod=%s %s %s", marker, chmod, source, destination)
 	} else {
-		copyCmd = fmt.Sprintf("COPY %s %s %s", source, destination, marker)
+		copyCmd = fmt.Sprintf("%s\nCOPY %s %s", marker, source, destination)
 	}
 
 	// Insert the command

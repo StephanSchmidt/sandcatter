@@ -364,7 +364,8 @@ ENTRYPOINT ["/bin/sh"]`
 func TestAddCopyCommandIdempotency(t *testing.T) {
 	input := `FROM debian
 USER root
-COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf # sandcutter:file:.tmux.conf
+# sandcutter:file:/etc/skel/.tmux.conf
+COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
 ENTRYPOINT ["/bin/sh"]`
 
 	fs := afero.NewMemMapFs()

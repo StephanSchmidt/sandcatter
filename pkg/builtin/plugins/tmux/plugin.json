@@ -11,10 +11,16 @@
     "fontconfig"
   ],
   "locale_packages": ["locales"],
+  "compose_command": "tmux",
   "files": [
     {
       "source": "files/tmux.conf",
       "destination": "/etc/skel/.tmux.conf",
+      "chmod": "644"
+    },
+    {
+      "source": "files/tmux.conf",
+      "destination": "/home/vscode/.tmux.conf",
       "chmod": "644"
     }
   ],

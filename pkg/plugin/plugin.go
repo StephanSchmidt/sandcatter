@@ -20,6 +20,7 @@ type Plugin struct {
 	LocalePackages []string          `json:"locale_packages"`
 	Files          []FileMapping     `json:"files"`
 	ComposeEnv     map[string]string `json:"compose_env"`
+	ComposeCommand string            `json:"compose_command,omitempty"`
 	LocaleSetup    *LocaleConfig     `json:"locale_setup"`
 
 	// Internal fields

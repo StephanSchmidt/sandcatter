@@ -179,6 +179,103 @@ services:
 	}
 }
 
+func TestSetComposeCommandReplace(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    command: sleep infinity`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	err = cf.SetComposeCommand("tmux")
+	if err != nil {
+		t.Fatalf("SetComposeCommand failed: %v", err)
+	}
+
+	got := cf.GetContent()
+
+	if !strings.Contains(got, "command: tmux") {
+		t.Error("Expected command to be set to tmux")
+	}
+	if strings.Contains(got, "sleep infinity") {
+		t.Error("Expected sleep infinity to be replaced")
+	}
+}
+
+func TestSetComposeCommandIdempotency(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    command: tmux`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	before := cf.GetContent()
+
+	err = cf.SetComposeCommand("tmux")
+	if err != nil {
+		t.Fatalf("SetComposeCommand failed: %v", err)
+	}
+
+	after := cf.GetContent()
+
+	if before != after {
+		t.Errorf("SetComposeCommand should be idempotent\nBefore:\n%s\nAfter:\n%s", before, after)
+	}
+}
+
+func TestSetComposeCommandEmpty(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    command: sleep infinity`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	before := cf.GetContent()
+
+	err = cf.SetComposeCommand("")
+	if err != nil {
+		t.Fatalf("SetComposeCommand failed: %v", err)
+	}
+
+	after := cf.GetContent()
+
+	if before != after {
+		t.Error("SetComposeCommand with empty string should not change anything")
+	}
+}
+
 func TestAddEnvironmentVariablesEmpty(t *testing.T) {
 	input := `name: test-project
 
