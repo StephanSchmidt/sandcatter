@@ -1,0 +1,27 @@
+# Binaries
+sandcutter
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Go workspace file
+go.work
+
+# Backup files
+*.backup
+
+# User plugins (but keep the directory with .gitkeep)
+plugins/*
+!plugins/.gitkeep
+
+# Test directory
+test-sandcat/
+*.tar.gz
