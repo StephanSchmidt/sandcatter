@@ -264,6 +264,66 @@ func (c *ComposeFile) SetComposeCommand(command string) error {
 	return nil
 }
 
+// RemoveEnvironmentVariables removes specific environment variable lines from the app service.
+func (c *ComposeFile) RemoveEnvironmentVariables(envVars map[string]string) error {
+	if len(envVars) == 0 {
+		return nil
+	}
+
+	// Build set of keys to remove
+	keysToRemove := make(map[string]bool)
+	for key := range envVars {
+		keysToRemove[key] = true
+	}
+
+	// Find and remove matching env var lines
+	var newLines []string
+	for _, line := range c.Lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- ") {
+			// Extract key from "- KEY=value"
+			entry := strings.TrimPrefix(trimmed, "- ")
+			eqIdx := strings.Index(entry, "=")
+			if eqIdx > 0 {
+				key := entry[:eqIdx]
+				if keysToRemove[key] {
+					continue // Skip this line
+				}
+			}
+		}
+		newLines = append(newLines, line)
+	}
+
+	c.Lines = newLines
+	return nil
+}
+
+// RemoveComposeCommand removes the command: line from the app service.
+func (c *ComposeFile) RemoveComposeCommand() error {
+	inAppService := false
+
+	for i, line := range c.Lines {
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "app:") {
+			inAppService = true
+			continue
+		}
+
+		// Left the app service
+		if inAppService && len(trimmed) > 0 && !strings.HasPrefix(line, " ") && strings.Contains(trimmed, ":") {
+			break
+		}
+
+		if inAppService && strings.HasPrefix(trimmed, "command:") {
+			c.Lines = append(c.Lines[:i], c.Lines[i+1:]...)
+			return nil
+		}
+	}
+
+	return nil
+}
+
 // GetContent returns the compose file content as a string
 func (c *ComposeFile) GetContent() string {
 	return strings.Join(c.Lines, "\n") + "\n"

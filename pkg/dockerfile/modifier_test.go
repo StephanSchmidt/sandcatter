@@ -664,6 +664,191 @@ ENTRYPOINT ["/bin/sh"]`
 	}
 }
 
+func TestRemovePluginPackages(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        vim \
+        # sandcutter:plugin:tmux:start \
+        tmux \
+        # sandcutter:plugin:tmux:end \
+        # sandcutter:plugin:claude-tools:start \
+        build-essential \
+        # sandcutter:plugin:claude-tools:end \
+    && rm -rf /var/lib/apt/lists/*`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	// Remove tmux, keep claude-tools
+	df.RemovePluginPackages("tmux")
+
+	got := df.GetContent()
+
+	want := `FROM debian
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        vim \
+        # sandcutter:plugin:claude-tools:start \
+        build-essential \
+        # sandcutter:plugin:claude-tools:end \
+    && rm -rf /var/lib/apt/lists/*
+`
+
+	if got != want {
+		t.Errorf("RemovePluginPackages() mismatch:\nGot:\n%s\nWant:\n%s", got, want)
+	}
+
+	// Verify claude-tools is still there
+	if !strings.Contains(got, "# sandcutter:plugin:claude-tools:start") {
+		t.Error("Expected claude-tools plugin to remain")
+	}
+	if !strings.Contains(got, "build-essential") {
+		t.Error("Expected build-essential package to remain")
+	}
+}
+
+func TestRemovePluginPackagesLastBlock(t *testing.T) {
+	// When the removed block is the last one before &&
+	input := `FROM debian
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        vim \
+        # sandcutter:plugin:tmux:start \
+        tmux \
+        # sandcutter:plugin:tmux:end \
+    && rm -rf /var/lib/apt/lists/*`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	df.RemovePluginPackages("tmux")
+
+	got := df.GetContent()
+
+	want := `FROM debian
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        vim \
+    && rm -rf /var/lib/apt/lists/*
+`
+
+	if got != want {
+		t.Errorf("RemovePluginPackagesLastBlock() mismatch:\nGot:\n%s\nWant:\n%s", got, want)
+	}
+}
+
+func TestRemoveRunCommands(t *testing.T) {
+	input := `FROM debian
+USER root
+# sandcutter:run:test-plugin:start
+RUN echo hello
+RUN echo world
+# sandcutter:run:test-plugin:end
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	df.RemoveRunCommands("test-plugin")
+
+	got := df.GetContent()
+
+	want := `FROM debian
+USER root
+ENTRYPOINT ["/bin/sh"]
+`
+
+	if got != want {
+		t.Errorf("RemoveRunCommands() mismatch:\nGot:\n%s\nWant:\n%s", got, want)
+	}
+}
+
+func TestRemoveDockerEnv(t *testing.T) {
+	input := `FROM debian
+USER root
+# sandcutter:run:claude-tools:start
+RUN echo hello
+# sandcutter:run:claude-tools:end
+# sandcutter:env:claude-tools:start
+ENV PATH=/home/linuxbrew/.linuxbrew/bin:$PATH
+# sandcutter:env:claude-tools:end
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	df.RemoveDockerEnv("claude-tools")
+
+	got := df.GetContent()
+
+	want := `FROM debian
+USER root
+# sandcutter:run:claude-tools:start
+RUN echo hello
+# sandcutter:run:claude-tools:end
+ENTRYPOINT ["/bin/sh"]
+`
+
+	if got != want {
+		t.Errorf("RemoveDockerEnv() mismatch:\nGot:\n%s\nWant:\n%s", got, want)
+	}
+}
+
+func TestRemoveCopyCommand(t *testing.T) {
+	input := `FROM debian
+USER root
+# sandcutter:file:/etc/skel/.tmux.conf
+COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	df.RemoveCopyCommand("/etc/skel/.tmux.conf")
+
+	got := df.GetContent()
+
+	want := `FROM debian
+USER root
+ENTRYPOINT ["/bin/sh"]
+`
+
+	if got != want {
+		t.Errorf("RemoveCopyCommand() mismatch:\nGot:\n%s\nWant:\n%s", got, want)
+	}
+}
+
 func TestAddCopyCommandIdempotency(t *testing.T) {
 	input := `FROM debian
 USER root
@@ -691,5 +876,108 @@ ENTRYPOINT ["/bin/sh"]`
 
 	if before != after {
 		t.Error("AddCopyCommand should be idempotent (no changes when already added)")
+	}
+}
+
+func TestAddRunCommandsNoEntrypoint(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+USER node`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	err = df.AddRunCommands([]string{"echo hello"}, "test-plugin")
+	if err != nil {
+		t.Fatalf("AddRunCommands failed: %v", err)
+	}
+
+	got := df.GetContent()
+
+	want := `FROM debian
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+# sandcutter:run:test-plugin:start
+RUN echo hello
+# sandcutter:run:test-plugin:end
+USER node
+`
+
+	if got != want {
+		t.Errorf("AddRunCommandsNoEntrypoint() mismatch:\nGot:\n%s\nWant:\n%s", got, want)
+	}
+}
+
+func TestAddCopyCommandNoEntrypoint(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+USER node`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	err = df.AddCopyCommand("tmux.conf", "/etc/skel/.tmux.conf", "644")
+	if err != nil {
+		t.Fatalf("AddCopyCommand failed: %v", err)
+	}
+
+	got := df.GetContent()
+
+	// COPY should be inserted before USER node
+	if !strings.Contains(got, "COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf") {
+		t.Error("Expected COPY command to be added")
+	}
+
+	copyIdx := strings.Index(got, "COPY --chmod=644")
+	userIdx := strings.LastIndex(got, "USER node")
+	if copyIdx > userIdx {
+		t.Error("COPY command should be before final USER line")
+	}
+}
+
+func TestAddDockerEnvNoEntrypoint(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+USER node`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	envVars := map[string]string{
+		"PATH": "/custom/bin:$PATH",
+	}
+	err = df.AddDockerEnv(envVars, "test-plugin")
+	if err != nil {
+		t.Fatalf("AddDockerEnv failed: %v", err)
+	}
+
+	got := df.GetContent()
+
+	// ENV should be inserted before USER node
+	if !strings.Contains(got, "# sandcutter:env:test-plugin:start") {
+		t.Error("Expected env start marker to be present")
+	}
+
+	envIdx := strings.Index(got, "# sandcutter:env:test-plugin:start")
+	userIdx := strings.LastIndex(got, "USER node")
+	if envIdx > userIdx {
+		t.Error("ENV block should be before final USER line")
 	}
 }

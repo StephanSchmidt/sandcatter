@@ -276,6 +276,90 @@ services:
 	}
 }
 
+func TestRemoveEnvironmentVariables(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    environment:
+      - EXISTING_VAR=value
+      - TERM=xterm-256color
+      - EDITOR=vim
+    network_mode: "service:wg-client"`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	envVars := map[string]string{
+		"TERM":   "xterm-256color",
+		"EDITOR": "vim",
+	}
+
+	err = cf.RemoveEnvironmentVariables(envVars)
+	if err != nil {
+		t.Fatalf("RemoveEnvironmentVariables failed: %v", err)
+	}
+
+	got := cf.GetContent()
+
+	// Check that removed variables are gone
+	if strings.Contains(got, "TERM=xterm-256color") {
+		t.Error("Expected TERM variable to be removed")
+	}
+	if strings.Contains(got, "EDITOR=vim") {
+		t.Error("Expected EDITOR variable to be removed")
+	}
+
+	// Check that existing variable is still there
+	if !strings.Contains(got, "EXISTING_VAR=value") {
+		t.Error("Expected existing variable to be preserved")
+	}
+}
+
+func TestRemoveComposeCommand(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    command: tmux
+    network_mode: "service:wg-client"`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	err = cf.RemoveComposeCommand()
+	if err != nil {
+		t.Fatalf("RemoveComposeCommand failed: %v", err)
+	}
+
+	got := cf.GetContent()
+
+	if strings.Contains(got, "command:") {
+		t.Error("Expected command line to be removed")
+	}
+
+	// Other lines should remain
+	if !strings.Contains(got, "network_mode:") {
+		t.Error("Expected network_mode to be preserved")
+	}
+}
+
 func TestAddEnvironmentVariablesEmpty(t *testing.T) {
 	input := `name: test-project
 

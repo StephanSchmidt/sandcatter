@@ -58,6 +58,28 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	case "remove":
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "Error: target directory required")
+			fmt.Fprintln(os.Stderr, "Usage: sandcutter remove <target-dir> [plugin-names...]")
+			os.Exit(1)
+		}
+		targetDir := os.Args[2]
+		pluginNames := os.Args[3:]
+
+		dryRun := false
+		for i, arg := range pluginNames {
+			if arg == "--dry-run" {
+				dryRun = true
+				pluginNames = append(pluginNames[:i], pluginNames[i+1:]...)
+				break
+			}
+		}
+
+		if err := removePlugins(targetDir, pluginNames, dryRun); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	case "version", "--version", "-v":
 		fmt.Printf("sandcutter v%s\n", version)
 	case "help", "--help", "-h":
@@ -75,6 +97,7 @@ func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  sandcutter list                           List available plugins")
 	fmt.Println("  sandcutter apply <target> [plugins...]    Apply plugins to sandcat installation")
+	fmt.Println("  sandcutter remove <target> [plugins...]   Remove plugins from sandcat installation")
 	fmt.Println("  sandcutter scan <target>                  Show installed plugins in target")
 	fmt.Println("  sandcutter version                        Show version information")
 	fmt.Println("  sandcutter help                           Show this help message")
@@ -86,6 +109,7 @@ func printUsage() {
 	fmt.Println("  sandcutter list")
 	fmt.Println("  sandcutter apply ../my-sandcat tmux")
 	fmt.Println("  sandcutter apply ../my-sandcat tmux neovim --dry-run")
+	fmt.Println("  sandcutter remove ../my-sandcat tmux")
 }
 
 func getPluginsDir() (string, error) {
@@ -152,8 +176,22 @@ func listPlugins() error {
 	return nil
 }
 
+func detectDockerfile(targetDir string) (string, error) {
+	devcontainerDir := filepath.Join(targetDir, ".devcontainer")
+	for _, name := range []string{"Dockerfile.app", "Dockerfile"} {
+		candidate := filepath.Join(devcontainerDir, name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("no Dockerfile found in %s (tried Dockerfile.app, Dockerfile)", devcontainerDir)
+}
+
 func scanDockerfile(targetDir string) error {
-	path := filepath.Join(targetDir, ".devcontainer", "Dockerfile.app")
+	path, err := detectDockerfile(targetDir)
+	if err != nil {
+		return err
+	}
 	df, err := dockerfile.Load(path)
 	if err != nil {
 		return fmt.Errorf("failed to load Dockerfile: %w", err)
@@ -221,6 +259,14 @@ func applyPlugins(targetDir string, pluginNames []string, dryRun bool) error {
 		pluginMap[p.Name] = p
 	}
 
+	// Create backups before applying any plugins
+	if !dryRun {
+		fmt.Println("Creating backups...")
+		if err := applier.Backup(); err != nil {
+			return fmt.Errorf("failed to create backups: %w", err)
+		}
+	}
+
 	// Load and apply each requested plugin
 	for _, pluginName := range pluginNames {
 		p, found := pluginMap[pluginName]
@@ -230,6 +276,52 @@ func applyPlugins(targetDir string, pluginNames []string, dryRun bool) error {
 
 		if err := applier.Apply(p, dryRun); err != nil {
 			return fmt.Errorf("failed to apply plugin %s: %w", pluginName, err)
+		}
+
+		fmt.Println()
+	}
+
+	return nil
+}
+
+func removePlugins(targetDir string, pluginNames []string, dryRun bool) error {
+	pluginsDir, _ := getPluginsDir()
+
+	if len(pluginNames) == 0 {
+		return fmt.Errorf("no plugins specified")
+	}
+
+	applier, err := plugin.NewApplier(targetDir, pluginsDir)
+	if err != nil {
+		return err
+	}
+
+	allPlugins, err := plugin.DiscoverPlugins(pluginsDir)
+	if err != nil {
+		return fmt.Errorf("failed to discover plugins: %w", err)
+	}
+
+	pluginMap := make(map[string]*plugin.Plugin)
+	for _, p := range allPlugins {
+		pluginMap[p.Name] = p
+	}
+
+	// Create backups before removing any plugins
+	if !dryRun {
+		fmt.Println("Creating backups...")
+		if err := applier.Backup(); err != nil {
+			return fmt.Errorf("failed to create backups: %w", err)
+		}
+	}
+
+	for _, pluginName := range pluginNames {
+		p, found := pluginMap[pluginName]
+		if !found {
+			return fmt.Errorf("plugin %s not found", pluginName)
+		}
+
+		if err := applier.Remove(p, dryRun); err != nil {
+			return fmt.Errorf("failed to remove plugin %s: %w", pluginName, err)
 		}
 
 		fmt.Println()

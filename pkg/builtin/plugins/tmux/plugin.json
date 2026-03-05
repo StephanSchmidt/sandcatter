@@ -11,7 +11,7 @@
     "fontconfig"
   ],
   "locale_packages": ["locales"],
-  "compose_command": "tmux",
+  "compose_command": "bash -c 'cd /workspaces/* 2>/dev/null; exec tmux'",
   "files": [
     {
       "source": "files/tmux.conf",

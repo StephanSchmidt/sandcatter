@@ -277,8 +277,17 @@ func (d *Dockerfile) AddRunCommands(commands []string, pluginName string) error 
 			break
 		}
 	}
+	// If no ENTRYPOINT, insert before the last USER line (stay in root context)
+	if insertIdx == len(d.Lines) {
+		for i := len(d.Lines) - 1; i >= 0; i-- {
+			if strings.HasPrefix(strings.TrimSpace(d.Lines[i]), "USER") {
+				insertIdx = i
+				break
+			}
+		}
+	}
 
-	// Scan backward from ENTRYPOINT to find the first sandcutter:file marker block
+	// Scan backward from insertion point to find the first sandcutter:file marker block
 	for i := insertIdx - 1; i >= 0; i-- {
 		trimmed := strings.TrimSpace(d.Lines[i])
 		if strings.HasPrefix(trimmed, "# sandcutter:file:") {
@@ -322,6 +331,15 @@ func (d *Dockerfile) AddCopyCommand(source, destination, chmod string) error {
 		if strings.HasPrefix(strings.TrimSpace(line), "ENTRYPOINT") {
 			insertIdx = i
 			break
+		}
+	}
+	// If no ENTRYPOINT, insert before the last USER line (stay in root context)
+	if insertIdx == len(d.Lines) {
+		for i := len(d.Lines) - 1; i >= 0; i-- {
+			if strings.HasPrefix(strings.TrimSpace(d.Lines[i]), "USER") {
+				insertIdx = i
+				break
+			}
 		}
 	}
 
@@ -371,8 +389,17 @@ func (d *Dockerfile) AddDockerEnv(envVars map[string]string, pluginName string) 
 				break
 			}
 		}
+		// If no ENTRYPOINT, insert before the last USER line (stay in root context)
+		if insertIdx == len(d.Lines) {
+			for i := len(d.Lines) - 1; i >= 0; i-- {
+				if strings.HasPrefix(strings.TrimSpace(d.Lines[i]), "USER") {
+					insertIdx = i
+					break
+				}
+			}
+		}
 
-		// Scan backward from ENTRYPOINT to find sandcutter:file marker blocks
+		// Scan backward from insertion point to find sandcutter:file marker blocks
 		for i := insertIdx - 1; i >= 0; i-- {
 			trimmed := strings.TrimSpace(d.Lines[i])
 			if strings.HasPrefix(trimmed, "# sandcutter:file:") {
@@ -454,6 +481,118 @@ func (d *Dockerfile) ScanPlugins() ScanResult {
 	}
 
 	return ScanResult{Plugins: result, Files: files}
+}
+
+// RemovePluginPackages removes lines between sandcutter:plugin:<name>:start and :end markers (inclusive),
+// adjusting backslash continuations on the preceding line as needed.
+func (d *Dockerfile) RemovePluginPackages(pluginName string) {
+	startMarker := fmt.Sprintf("# sandcutter:plugin:%s:start", pluginName)
+	endMarker := fmt.Sprintf("# sandcutter:plugin:%s:end", pluginName)
+
+	startIdx := -1
+	endIdx := -1
+	for i, line := range d.Lines {
+		trimmed := strings.TrimSpace(line)
+		trimmed = strings.TrimSuffix(trimmed, " \\")
+		if trimmed == startMarker {
+			startIdx = i
+		}
+		if trimmed == endMarker {
+			endIdx = i
+			break
+		}
+	}
+
+	if startIdx == -1 || endIdx == -1 {
+		return
+	}
+
+	// Check what follows the block to decide about backslash on preceding line
+	followingIdx := endIdx + 1
+	needsBackslash := false
+	if followingIdx < len(d.Lines) {
+		followingTrimmed := strings.TrimSpace(d.Lines[followingIdx])
+		needsBackslash = strings.HasPrefix(followingTrimmed, "&&") ||
+			strings.HasPrefix(followingTrimmed, "# sandcutter:plugin:")
+	}
+
+	// Remove the block
+	d.Lines = append(d.Lines[:startIdx], d.Lines[endIdx+1:]...)
+
+	// Adjust backslash on the line now preceding the following content
+	if startIdx > 0 {
+		prevIdx := startIdx - 1
+		prevLine := d.Lines[prevIdx]
+		prevTrimmed := strings.TrimRight(prevLine, " ")
+
+		if needsBackslash {
+			// Ensure trailing backslash
+			if !strings.HasSuffix(prevTrimmed, "\\") {
+				d.Lines[prevIdx] = prevTrimmed + " \\"
+			}
+		} else {
+			// Strip trailing backslash if present
+			if strings.HasSuffix(prevTrimmed, " \\") {
+				d.Lines[prevIdx] = strings.TrimSuffix(prevTrimmed, " \\")
+			}
+		}
+	}
+}
+
+// RemoveRunCommands removes lines between sandcutter:run:<name>:start and :end markers (inclusive).
+func (d *Dockerfile) RemoveRunCommands(pluginName string) {
+	startMarker := fmt.Sprintf("# sandcutter:run:%s:start", pluginName)
+	endMarker := fmt.Sprintf("# sandcutter:run:%s:end", pluginName)
+	d.removeMarkerBlock(startMarker, endMarker)
+}
+
+// RemoveDockerEnv removes lines between sandcutter:env:<name>:start and :end markers (inclusive).
+func (d *Dockerfile) RemoveDockerEnv(pluginName string) {
+	startMarker := fmt.Sprintf("# sandcutter:env:%s:start", pluginName)
+	endMarker := fmt.Sprintf("# sandcutter:env:%s:end", pluginName)
+	d.removeMarkerBlock(startMarker, endMarker)
+}
+
+// removeMarkerBlock removes all lines from startMarker to endMarker (inclusive).
+func (d *Dockerfile) removeMarkerBlock(startMarker, endMarker string) {
+	startIdx := -1
+	endIdx := -1
+	for i, line := range d.Lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == startMarker {
+			startIdx = i
+		}
+		if trimmed == endMarker {
+			endIdx = i
+			break
+		}
+	}
+
+	if startIdx == -1 || endIdx == -1 {
+		return
+	}
+
+	d.Lines = append(d.Lines[:startIdx], d.Lines[endIdx+1:]...)
+}
+
+// RemoveCopyCommand finds the sandcutter:file:<destination> marker and the COPY line after it, removing both.
+func (d *Dockerfile) RemoveCopyCommand(destination string) {
+	marker := fmt.Sprintf("# sandcutter:file:%s", destination)
+
+	for i, line := range d.Lines {
+		if strings.TrimSpace(line) == marker {
+			// Remove the marker line and the COPY line after it
+			end := i + 1
+			if end < len(d.Lines) {
+				trimmed := strings.TrimSpace(d.Lines[end])
+				if strings.HasPrefix(trimmed, "COPY") {
+					end = i + 2
+				}
+			}
+			d.Lines = append(d.Lines[:i], d.Lines[end:]...)
+			return
+		}
+	}
 }
 
 // GetContent returns the Dockerfile content as a string

@@ -5,11 +5,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/StephanSchmidt/sandcatter/pkg/dockerfile"
 )
 
-// Applier handles applying plugins to a sandcat installation
+// Applier handles applying plugins to a devcontainer setup
 type Applier struct {
 	TargetDir      string
 	DockerfilePath string
@@ -19,16 +20,29 @@ type Applier struct {
 
 // NewApplier creates a new plugin applier
 func NewApplier(targetDir, pluginsDir string) (*Applier, error) {
-	// Validate target directory
-	dockerfilePath := filepath.Join(targetDir, ".devcontainer", "Dockerfile.app")
-	composePath := filepath.Join(targetDir, ".devcontainer", "compose-all.yml")
+	devcontainerDir := filepath.Join(targetDir, ".devcontainer")
 
-	if _, err := os.Stat(dockerfilePath); err != nil {
-		return nil, fmt.Errorf("target directory does not appear to be a sandcat installation (missing %s)", dockerfilePath)
+	// Auto-detect Dockerfile
+	dockerfilePath := ""
+	for _, name := range []string{"Dockerfile.app", "Dockerfile"} {
+		candidate := filepath.Join(devcontainerDir, name)
+		if _, err := os.Stat(candidate); err == nil {
+			dockerfilePath = candidate
+			break
+		}
+	}
+	if dockerfilePath == "" {
+		return nil, fmt.Errorf("no Dockerfile found in %s (tried Dockerfile.app, Dockerfile)", devcontainerDir)
 	}
 
-	if _, err := os.Stat(composePath); err != nil {
-		return nil, fmt.Errorf("target directory does not appear to be a sandcat installation (missing %s)", composePath)
+	// Auto-detect compose file (optional)
+	composePath := ""
+	for _, name := range []string{"compose-all.yml", "docker-compose.yml", "compose.yml"} {
+		candidate := filepath.Join(devcontainerDir, name)
+		if _, err := os.Stat(candidate); err == nil {
+			composePath = candidate
+			break
+		}
 	}
 
 	return &Applier{
@@ -51,6 +65,29 @@ func detectComposeCommand() (string, error) {
 	return "", fmt.Errorf("docker compose is not installed; install Docker Compose (https://docs.docker.com/compose/install/) and try again")
 }
 
+// Backup creates backups of the Dockerfile and compose file
+func (a *Applier) Backup() error {
+	df, err := dockerfile.Load(a.DockerfilePath)
+	if err != nil {
+		return fmt.Errorf("failed to load Dockerfile: %w", err)
+	}
+	if err := df.Backup(); err != nil {
+		return fmt.Errorf("failed to backup Dockerfile: %w", err)
+	}
+
+	if a.ComposePath != "" {
+		compose, err := dockerfile.LoadCompose(a.ComposePath)
+		if err != nil {
+			return fmt.Errorf("failed to load compose file: %w", err)
+		}
+		if err := compose.Backup(); err != nil {
+			return fmt.Errorf("failed to backup compose file: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // Apply applies a plugin to the target sandcat installation
 func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 	fmt.Printf("Applying plugin: %s v%s\n", plugin.Name, plugin.Version)
@@ -62,20 +99,12 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 		return fmt.Errorf("failed to load Dockerfile: %w", err)
 	}
 
-	// Load compose file
-	compose, err := dockerfile.LoadCompose(a.ComposePath)
-	if err != nil {
-		return fmt.Errorf("failed to load compose file: %w", err)
-	}
-
-	// Create backups
-	if !dryRun {
-		fmt.Println("Creating backups...")
-		if err := df.Backup(); err != nil {
-			return fmt.Errorf("failed to backup Dockerfile: %w", err)
-		}
-		if err := compose.Backup(); err != nil {
-			return fmt.Errorf("failed to backup compose file: %w", err)
+	// Load compose file (optional)
+	var compose *dockerfile.ComposeFile
+	if a.ComposePath != "" {
+		compose, err = dockerfile.LoadCompose(a.ComposePath)
+		if err != nil {
+			return fmt.Errorf("failed to load compose file: %w", err)
 		}
 	}
 
@@ -146,7 +175,7 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 	}
 
 	// Apply environment variables to compose file
-	if len(plugin.ComposeEnv) > 0 {
+	if compose != nil && len(plugin.ComposeEnv) > 0 {
 		fmt.Printf("Adding environment variables: %v\n", plugin.ComposeEnv)
 		if err := compose.AddEnvironmentVariables(plugin.ComposeEnv); err != nil {
 			return fmt.Errorf("failed to add environment variables: %w", err)
@@ -154,7 +183,7 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 	}
 
 	// Apply compose command
-	if plugin.ComposeCommand != "" {
+	if compose != nil && plugin.ComposeCommand != "" {
 		fmt.Printf("Setting compose command: %s\n", plugin.ComposeCommand)
 		if err := compose.SetComposeCommand(plugin.ComposeCommand); err != nil {
 			return fmt.Errorf("failed to set compose command: %w", err)
@@ -163,29 +192,137 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 
 	// Save changes
 	if dryRun {
-		fmt.Println("\n--- DRY RUN: Dockerfile.app changes ---")
+		dockerfileName := filepath.Base(a.DockerfilePath)
+		fmt.Printf("\n--- DRY RUN: %s changes ---\n", dockerfileName)
 		fmt.Println(df.GetContent())
-		fmt.Println("\n--- DRY RUN: compose-all.yml changes ---")
-		fmt.Println(compose.GetContent())
+		if compose != nil {
+			composeName := filepath.Base(a.ComposePath)
+			fmt.Printf("\n--- DRY RUN: %s changes ---\n", composeName)
+			fmt.Println(compose.GetContent())
+		}
 		fmt.Println("\n(No changes were actually written)")
 	} else {
 		fmt.Println("\nSaving changes...")
 		if err := df.Save(); err != nil {
 			return fmt.Errorf("failed to save Dockerfile: %w", err)
 		}
-		if err := compose.Save(); err != nil {
-			return fmt.Errorf("failed to save compose file: %w", err)
+		if compose != nil {
+			if err := compose.Save(); err != nil {
+				return fmt.Errorf("failed to save compose file: %w", err)
+			}
 		}
 
 		fmt.Println("\n✓ Plugin applied successfully!")
 		fmt.Println("\nBackups saved with .backup extension")
-		composeCmd, err := detectComposeCommand()
-		if err != nil {
-			return err
+		if a.ComposePath != "" {
+			composeCmd, err := detectComposeCommand()
+			if err != nil {
+				return err
+			}
+			composeName := filepath.Base(a.ComposePath)
+			fmt.Println("\nRun:")
+			fmt.Printf("  cd %s && %s -f .devcontainer/%s run --rm --build app\n", a.TargetDir, composeCmd, composeName)
 		}
-		fmt.Println("\nRun:")
-		fmt.Printf("  cd %s && %s -f .devcontainer/compose-all.yml run --rm --build app\n", a.TargetDir, composeCmd)
 	}
 
 	return nil
+}
+
+// Remove removes a plugin from the target devcontainer setup
+func (a *Applier) Remove(plugin *Plugin, dryRun bool) error {
+	fmt.Printf("Removing plugin: %s v%s\n", plugin.Name, plugin.Version)
+
+	// Load Dockerfile
+	df, err := dockerfile.Load(a.DockerfilePath)
+	if err != nil {
+		return fmt.Errorf("failed to load Dockerfile: %w", err)
+	}
+
+	// Load compose file (optional)
+	var compose *dockerfile.ComposeFile
+	if a.ComposePath != "" {
+		compose, err = dockerfile.LoadCompose(a.ComposePath)
+		if err != nil {
+			return fmt.Errorf("failed to load compose file: %w", err)
+		}
+	}
+
+	// Remove plugin packages
+	df.RemovePluginPackages(plugin.Name)
+	fmt.Println("Removed plugin packages")
+
+	// Remove run commands
+	df.RemoveRunCommands(plugin.Name)
+	fmt.Println("Removed RUN commands")
+
+	// Remove Dockerfile ENV
+	df.RemoveDockerEnv(plugin.Name)
+	fmt.Println("Removed Dockerfile ENV")
+
+	// Remove file COPY commands and physical files
+	devcontainerDir := filepath.Join(a.TargetDir, ".devcontainer")
+	for _, file := range plugin.Files {
+		df.RemoveCopyCommand(file.Destination)
+		fmt.Printf("Removed COPY command for %s\n", file.Destination)
+
+		if !dryRun {
+			targetFileName := filepath.Base(file.Source)
+			targetPath := filepath.Join(devcontainerDir, targetFileName)
+			if err := os.Remove(targetPath); err != nil && !os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "Warning: could not remove file %s: %v\n", targetPath, err)
+			} else if err == nil {
+				fmt.Printf("Deleted file: %s\n", targetPath)
+			}
+		}
+	}
+
+	// Remove compose environment variables
+	if compose != nil && len(plugin.ComposeEnv) > 0 {
+		if err := compose.RemoveEnvironmentVariables(plugin.ComposeEnv); err != nil {
+			return fmt.Errorf("failed to remove environment variables: %w", err)
+		}
+		fmt.Printf("Removed compose environment variables: %s\n", strings.Join(mapKeys(plugin.ComposeEnv), ", "))
+	}
+
+	// Remove compose command
+	if compose != nil && plugin.ComposeCommand != "" {
+		if err := compose.RemoveComposeCommand(); err != nil {
+			return fmt.Errorf("failed to remove compose command: %w", err)
+		}
+		fmt.Println("Removed compose command")
+	}
+
+	// Save changes
+	if dryRun {
+		dockerfileName := filepath.Base(a.DockerfilePath)
+		fmt.Printf("\n--- DRY RUN: %s changes ---\n", dockerfileName)
+		fmt.Println(df.GetContent())
+		if compose != nil {
+			composeName := filepath.Base(a.ComposePath)
+			fmt.Printf("\n--- DRY RUN: %s changes ---\n", composeName)
+			fmt.Println(compose.GetContent())
+		}
+		fmt.Println("\n(No changes were actually written)")
+	} else {
+		fmt.Println("\nSaving changes...")
+		if err := df.Save(); err != nil {
+			return fmt.Errorf("failed to save Dockerfile: %w", err)
+		}
+		if compose != nil {
+			if err := compose.Save(); err != nil {
+				return fmt.Errorf("failed to save compose file: %w", err)
+			}
+		}
+		fmt.Println("\n✓ Plugin removed successfully!")
+	}
+
+	return nil
+}
+
+func mapKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
