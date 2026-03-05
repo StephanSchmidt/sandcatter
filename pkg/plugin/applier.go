@@ -101,6 +101,22 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 		}
 	}
 
+	// Apply run commands
+	if len(plugin.RunCommands) > 0 {
+		fmt.Printf("Adding RUN commands: %d command(s)\n", len(plugin.RunCommands))
+		if err := df.AddRunCommands(plugin.RunCommands, plugin.Name); err != nil {
+			return fmt.Errorf("failed to add RUN commands: %w", err)
+		}
+	}
+
+	// Apply Dockerfile ENV variables
+	if len(plugin.DockerEnv) > 0 {
+		fmt.Printf("Adding Dockerfile ENV: %v\n", plugin.DockerEnv)
+		if err := df.AddDockerEnv(plugin.DockerEnv, plugin.Name); err != nil {
+			return fmt.Errorf("failed to add Dockerfile ENV: %w", err)
+		}
+	}
+
 	// Copy plugin files to target
 	devcontainerDir := filepath.Join(a.TargetDir, ".devcontainer")
 	for _, file := range plugin.Files {

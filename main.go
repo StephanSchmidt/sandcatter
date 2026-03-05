@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/StephanSchmidt/sandcatter/pkg/dockerfile"
 	"github.com/StephanSchmidt/sandcatter/pkg/plugin"
 )
 
@@ -22,6 +23,16 @@ func main() {
 	switch command {
 	case "list":
 		if err := listPlugins(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	case "scan":
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "Error: target directory required")
+			fmt.Fprintln(os.Stderr, "Usage: sandcutter scan <target-dir>")
+			os.Exit(1)
+		}
+		if err := scanDockerfile(os.Args[2]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -64,6 +75,7 @@ func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  sandcutter list                           List available plugins")
 	fmt.Println("  sandcutter apply <target> [plugins...]    Apply plugins to sandcat installation")
+	fmt.Println("  sandcutter scan <target>                  Show installed plugins in target")
 	fmt.Println("  sandcutter version                        Show version information")
 	fmt.Println("  sandcutter help                           Show this help message")
 	fmt.Println()
@@ -133,6 +145,49 @@ func listPlugins() error {
 		}
 		if len(p.Fonts) > 0 {
 			fmt.Printf("    Fonts: %s\n", strings.Join(p.Fonts, ", "))
+		}
+		fmt.Println()
+	}
+
+	return nil
+}
+
+func scanDockerfile(targetDir string) error {
+	path := filepath.Join(targetDir, ".devcontainer", "Dockerfile.app")
+	df, err := dockerfile.Load(path)
+	if err != nil {
+		return fmt.Errorf("failed to load Dockerfile: %w", err)
+	}
+
+	result := df.ScanPlugins()
+
+	if len(result.Plugins) == 0 && len(result.Files) == 0 {
+		fmt.Println("No sandcutter plugins detected")
+		return nil
+	}
+
+	if len(result.Plugins) > 0 {
+		fmt.Printf("Installed plugins (%d):\n\n", len(result.Plugins))
+		for _, p := range result.Plugins {
+			var parts []string
+			if p.Packages {
+				parts = append(parts, "packages")
+			}
+			if p.Run {
+				parts = append(parts, "run commands")
+			}
+			if p.Env {
+				parts = append(parts, "env vars")
+			}
+			fmt.Printf("  %s (%s)\n", p.Name, strings.Join(parts, ", "))
+		}
+		fmt.Println()
+	}
+
+	if len(result.Files) > 0 {
+		fmt.Printf("Managed files (%d):\n", len(result.Files))
+		for _, f := range result.Files {
+			fmt.Printf("  %s\n", f)
 		}
 		fmt.Println()
 	}

@@ -26,10 +26,10 @@ RUN apt-get update \
 			want: `FROM debian
 RUN apt-get update \
     && apt-get install -y --no-install-recommends vim \
-    # sandcutter:plugin:test-plugin:start
+    # sandcutter:plugin:test-plugin:start \
     tmux \
     curl \
-    # sandcutter:plugin:test-plugin:end
+    # sandcutter:plugin:test-plugin:end \
     && rm -rf /var/lib/apt/lists/*`,
 		},
 		{
@@ -45,10 +45,10 @@ RUN apt-get update \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         gh gosu jq vim \
-        # sandcutter:plugin:tmux:start
+        # sandcutter:plugin:tmux:start \
         tmux \
         fonts-dejavu \
-        # sandcutter:plugin:tmux:end
+        # sandcutter:plugin:tmux:end \
     && rm -rf /var/lib/apt/lists/*`,
 		},
 		{
@@ -62,9 +62,9 @@ RUN apt-get update \
 			want: `FROM debian
 RUN apt-get update \
     && apt-get install -y vim tmux \
-    # sandcutter:plugin:test-plugin:start
+    # sandcutter:plugin:test-plugin:start \
     curl \
-    # sandcutter:plugin:test-plugin:end
+    # sandcutter:plugin:test-plugin:end \
     && rm -rf /var/lib/apt/lists/*`,
 		},
 		{
@@ -358,6 +358,309 @@ ENTRYPOINT ["/bin/sh"]`
 	entrypointIdx := strings.Index(got, "ENTRYPOINT")
 	if copyIdx > entrypointIdx {
 		t.Error("COPY command should be before ENTRYPOINT")
+	}
+}
+
+func TestAddRunCommands(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+USER root
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	err = df.AddRunCommands([]string{"echo hello", "echo world"}, "test-plugin")
+	if err != nil {
+		t.Fatalf("AddRunCommands failed: %v", err)
+	}
+
+	got := df.GetContent()
+
+	want := `FROM debian
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+USER root
+# sandcutter:run:test-plugin:start
+RUN echo hello
+RUN echo world
+# sandcutter:run:test-plugin:end
+ENTRYPOINT ["/bin/sh"]
+`
+
+	if got != want {
+		t.Errorf("AddRunCommands() mismatch:\nGot:\n%s\nWant:\n%s", got, want)
+	}
+}
+
+func TestAddRunCommandsIdempotency(t *testing.T) {
+	input := `FROM debian
+USER root
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	commands := []string{"echo hello", "echo world"}
+
+	err = df.AddRunCommands(commands, "test-plugin")
+	if err != nil {
+		t.Fatalf("AddRunCommands failed: %v", err)
+	}
+	firstResult := df.GetContent()
+
+	err = df.AddRunCommands(commands, "test-plugin")
+	if err != nil {
+		t.Fatalf("AddRunCommands failed on second run: %v", err)
+	}
+	secondResult := df.GetContent()
+
+	if firstResult != secondResult {
+		t.Errorf("AddRunCommands not idempotent:\nFirst:\n%s\nSecond:\n%s", firstResult, secondResult)
+	}
+}
+
+func TestAddRunCommandsBeforeCopy(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+USER root
+# sandcutter:file:/etc/skel/.tmux.conf
+COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	err = df.AddRunCommands([]string{"echo hello", "echo world"}, "test-plugin")
+	if err != nil {
+		t.Fatalf("AddRunCommands failed: %v", err)
+	}
+
+	got := df.GetContent()
+
+	want := `FROM debian
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+USER root
+# sandcutter:run:test-plugin:start
+RUN echo hello
+RUN echo world
+# sandcutter:run:test-plugin:end
+# sandcutter:file:/etc/skel/.tmux.conf
+COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
+ENTRYPOINT ["/bin/sh"]
+`
+
+	if got != want {
+		t.Errorf("AddRunCommandsBeforeCopy() mismatch:\nGot:\n%s\nWant:\n%s", got, want)
+	}
+}
+
+func TestAddDockerEnv(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+USER root
+# sandcutter:run:claude-tools:start
+RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+# sandcutter:run:claude-tools:end
+# sandcutter:file:/etc/skel/.tmux.conf
+COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	envVars := map[string]string{
+		"PATH": "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH",
+	}
+	err = df.AddDockerEnv(envVars, "claude-tools")
+	if err != nil {
+		t.Fatalf("AddDockerEnv failed: %v", err)
+	}
+
+	got := df.GetContent()
+
+	// ENV block should appear after the run block end marker
+	if !strings.Contains(got, "# sandcutter:env:claude-tools:start") {
+		t.Error("Expected env start marker to be present")
+	}
+	if !strings.Contains(got, "ENV PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH") {
+		t.Error("Expected ENV PATH instruction to be present")
+	}
+	if !strings.Contains(got, "# sandcutter:env:claude-tools:end") {
+		t.Error("Expected env end marker to be present")
+	}
+
+	// ENV should be after run:end and before file marker
+	runEndIdx := strings.Index(got, "# sandcutter:run:claude-tools:end")
+	envStartIdx := strings.Index(got, "# sandcutter:env:claude-tools:start")
+	fileIdx := strings.Index(got, "# sandcutter:file:")
+	if envStartIdx < runEndIdx {
+		t.Error("ENV block should be after run block")
+	}
+	if envStartIdx > fileIdx {
+		t.Error("ENV block should be before file COPY markers")
+	}
+}
+
+func TestAddDockerEnvIdempotency(t *testing.T) {
+	input := `FROM debian
+USER root
+# sandcutter:run:claude-tools:start
+RUN echo hello
+# sandcutter:run:claude-tools:end
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	envVars := map[string]string{
+		"PATH": "/home/linuxbrew/.linuxbrew/bin:$PATH",
+	}
+
+	err = df.AddDockerEnv(envVars, "claude-tools")
+	if err != nil {
+		t.Fatalf("AddDockerEnv failed: %v", err)
+	}
+	firstResult := df.GetContent()
+
+	err = df.AddDockerEnv(envVars, "claude-tools")
+	if err != nil {
+		t.Fatalf("AddDockerEnv failed on second run: %v", err)
+	}
+	secondResult := df.GetContent()
+
+	if firstResult != secondResult {
+		t.Errorf("AddDockerEnv not idempotent:\nFirst:\n%s\nSecond:\n%s", firstResult, secondResult)
+	}
+}
+
+func TestScanPlugins(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        vim \
+        # sandcutter:plugin:tmux:start \
+        tmux \
+        # sandcutter:plugin:tmux:end \
+        # sandcutter:plugin:claude-tools:start \
+        build-essential \
+        # sandcutter:plugin:claude-tools:end \
+    && rm -rf /var/lib/apt/lists/*
+USER root
+# sandcutter:run:tmux:start
+RUN echo "tmux setup"
+# sandcutter:run:tmux:end
+# sandcutter:run:claude-tools:start
+RUN curl -fsSL https://example.com/install.sh | bash
+# sandcutter:run:claude-tools:end
+# sandcutter:env:claude-tools:start
+ENV PATH=/home/linuxbrew/.linuxbrew/bin:$PATH
+# sandcutter:env:claude-tools:end
+# sandcutter:file:/etc/skel/.tmux.conf
+COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
+# sandcutter:file:/usr/local/bin/setup.sh
+COPY --chmod=755 setup.sh /usr/local/bin/setup.sh
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	result := df.ScanPlugins()
+
+	// Should find 2 plugins
+	if len(result.Plugins) != 2 {
+		t.Fatalf("Expected 2 plugins, got %d", len(result.Plugins))
+	}
+
+	// Build a map for easier lookup
+	pluginMap := make(map[string]InstalledPlugin)
+	for _, p := range result.Plugins {
+		pluginMap[p.Name] = p
+	}
+
+	// Check tmux plugin
+	tmux, ok := pluginMap["tmux"]
+	if !ok {
+		t.Fatal("Expected tmux plugin to be found")
+	}
+	if !tmux.Packages {
+		t.Error("Expected tmux to have packages")
+	}
+	if !tmux.Run {
+		t.Error("Expected tmux to have run commands")
+	}
+	if tmux.Env {
+		t.Error("Expected tmux to NOT have env vars")
+	}
+
+	// Check claude-tools plugin
+	ct, ok := pluginMap["claude-tools"]
+	if !ok {
+		t.Fatal("Expected claude-tools plugin to be found")
+	}
+	if !ct.Packages {
+		t.Error("Expected claude-tools to have packages")
+	}
+	if !ct.Run {
+		t.Error("Expected claude-tools to have run commands")
+	}
+	if !ct.Env {
+		t.Error("Expected claude-tools to have env vars")
+	}
+
+	// Check files
+	if len(result.Files) != 2 {
+		t.Fatalf("Expected 2 files, got %d", len(result.Files))
+	}
+	expectedFiles := map[string]bool{
+		"/etc/skel/.tmux.conf":      false,
+		"/usr/local/bin/setup.sh":   false,
+	}
+	for _, f := range result.Files {
+		if _, ok := expectedFiles[f]; !ok {
+			t.Errorf("Unexpected file: %s", f)
+		}
+		expectedFiles[f] = true
+	}
+	for f, found := range expectedFiles {
+		if !found {
+			t.Errorf("Expected file not found: %s", f)
+		}
 	}
 }
 

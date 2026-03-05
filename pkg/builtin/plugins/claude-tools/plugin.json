@@ -1,0 +1,19 @@
+{
+  "name": "claude-tools",
+  "version": "1.0.0",
+  "description": "Installs Homebrew and CLI tools: yq, ripgrep, mdq, fd, fzf",
+  "apt_packages": [
+    "build-essential",
+    "procps",
+    "curl",
+    "file",
+    "git"
+  ],
+  "run_commands": [
+    "su - vscode -c 'NONINTERACTIVE=1 /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"'",
+    "su - vscode -c '/home/linuxbrew/.linuxbrew/bin/brew install yq ripgrep mdq fd fzf'"
+  ],
+  "env": {
+    "PATH": "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH"
+  }
+}
