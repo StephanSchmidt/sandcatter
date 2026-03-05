@@ -10,7 +10,11 @@ import (
 	"github.com/StephanSchmidt/sandcatter/pkg/plugin"
 )
 
-const version = "1.0.0"
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -29,7 +33,7 @@ func main() {
 	case "scan":
 		if len(os.Args) < 3 {
 			fmt.Fprintln(os.Stderr, "Error: target directory required")
-			fmt.Fprintln(os.Stderr, "Usage: sandcutter scan <target-dir>")
+			fmt.Fprintln(os.Stderr, "Usage: sandcatter scan <target-dir>")
 			os.Exit(1)
 		}
 		if err := scanDockerfile(os.Args[2]); err != nil {
@@ -39,7 +43,7 @@ func main() {
 	case "apply":
 		if len(os.Args) < 3 {
 			fmt.Fprintln(os.Stderr, "Error: target directory required")
-			fmt.Fprintln(os.Stderr, "Usage: sandcutter apply <target-dir> [plugin-names...]")
+			fmt.Fprintln(os.Stderr, "Usage: sandcatter apply <target-dir> [plugin-names...]")
 			os.Exit(1)
 		}
 		targetDir := os.Args[2]
@@ -61,7 +65,7 @@ func main() {
 	case "remove":
 		if len(os.Args) < 3 {
 			fmt.Fprintln(os.Stderr, "Error: target directory required")
-			fmt.Fprintln(os.Stderr, "Usage: sandcutter remove <target-dir> [plugin-names...]")
+			fmt.Fprintln(os.Stderr, "Usage: sandcatter remove <target-dir> [plugin-names...]")
 			os.Exit(1)
 		}
 		targetDir := os.Args[2]
@@ -81,7 +85,7 @@ func main() {
 			os.Exit(1)
 		}
 	case "version", "--version", "-v":
-		fmt.Printf("sandcutter v%s\n", version)
+		fmt.Printf("sandcatter %s (%s) %s\n", version, commit, date)
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -92,28 +96,28 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println("sandcutter - Add functionality plugins to sandcat installations")
+	fmt.Println("sandcatter - Add functionality plugins to sandcat installations")
 	fmt.Println()
 	fmt.Println("Usage:")
-	fmt.Println("  sandcutter list                           List available plugins")
-	fmt.Println("  sandcutter apply <target> [plugins...]    Apply plugins to sandcat installation")
-	fmt.Println("  sandcutter remove <target> [plugins...]   Remove plugins from sandcat installation")
-	fmt.Println("  sandcutter scan <target>                  Show installed plugins in target")
-	fmt.Println("  sandcutter version                        Show version information")
-	fmt.Println("  sandcutter help                           Show this help message")
+	fmt.Println("  sandcatter list                           List available plugins")
+	fmt.Println("  sandcatter apply <target> [plugins...]    Apply plugins to sandcat installation")
+	fmt.Println("  sandcatter remove <target> [plugins...]   Remove plugins from sandcat installation")
+	fmt.Println("  sandcatter scan <target>                  Show installed plugins in target")
+	fmt.Println("  sandcatter version                        Show version information")
+	fmt.Println("  sandcatter help                           Show this help message")
 	fmt.Println()
 	fmt.Println("Options:")
 	fmt.Println("  --dry-run                                 Show changes without applying them")
 	fmt.Println()
 	fmt.Println("Examples:")
-	fmt.Println("  sandcutter list")
-	fmt.Println("  sandcutter apply ../my-sandcat tmux")
-	fmt.Println("  sandcutter apply ../my-sandcat tmux neovim --dry-run")
-	fmt.Println("  sandcutter remove ../my-sandcat tmux")
+	fmt.Println("  sandcatter list")
+	fmt.Println("  sandcatter apply ../my-sandcat tmux")
+	fmt.Println("  sandcatter apply ../my-sandcat tmux neovim --dry-run")
+	fmt.Println("  sandcatter remove ../my-sandcat tmux")
 }
 
 func getPluginsDir() (string, error) {
-	// Get the directory where the sandcutter binary is located
+	// Get the directory where the sandcatter binary is located
 	exe, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("failed to get executable path: %w", err)
@@ -200,7 +204,7 @@ func scanDockerfile(targetDir string) error {
 	result := df.ScanPlugins()
 
 	if len(result.Plugins) == 0 && len(result.Files) == 0 {
-		fmt.Println("No sandcutter plugins detected")
+		fmt.Println("No sandcatter plugins detected")
 		return nil
 	}
 
@@ -236,9 +240,9 @@ func scanDockerfile(targetDir string) error {
 func applyPlugins(targetDir string, pluginNames []string, dryRun bool) error {
 	pluginsDir, _ := getPluginsDir() // Don't fail if not found
 
-	// If no plugin names specified, try to read from sandcutter.yaml
+	// If no plugin names specified, try to read from sandcatter.yaml
 	if len(pluginNames) == 0 {
-		return fmt.Errorf("no plugins specified (sandcutter.yaml support coming soon)")
+		return fmt.Errorf("no plugins specified (sandcatter.yaml support coming soon)")
 	}
 
 	// Create applier

@@ -1,0 +1,43 @@
+version: 2
+
+builds:
+  - main: .
+    binary: sandcatter
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: checksums.txt
+
+brews:
+  - repository:
+      owner: StephanSchmidt
+      name: homebrew-tap
+    homepage: https://github.com/StephanSchmidt/sandcatter
+    description: Add functionality plugins to devcontainer setups
+    license: MIT
+    install: |
+      bin.install "sandcatter"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

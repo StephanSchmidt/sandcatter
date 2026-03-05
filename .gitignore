@@ -1,5 +1,5 @@
 # Binaries
-sandcutter
+sandcatter
 *.exe
 *.dll
 *.so
@@ -25,3 +25,6 @@ plugins/*
 # Test directory
 test-sandcat/
 *.tar.gz
+
+# GoReleaser
+dist/

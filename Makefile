@@ -1,7 +1,11 @@
-.PHONY: all build test test-verbose clean install lint sec secrets check help
+.PHONY: all build test test-verbose clean install lint sec secrets check release help
 
 # Binary name
-BINARY=sandcutter
+BINARY=sandcatter
+
+# Version info
+VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+LDFLAGS=-s -w -X main.version=$(VERSION) -X main.commit=$(shell git rev-parse --short HEAD) -X main.date=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Go parameters
 GOCMD=go
@@ -19,7 +23,7 @@ all: test build
 ## build: Build the binary
 build:
 	@echo "Building $(BINARY)..."
-	@$(GOBUILD) $(BUILD_FLAGS) -o $(BINARY) .
+	@$(GOBUILD) -ldflags "$(LDFLAGS)" $(BUILD_FLAGS) -o $(BINARY) .
 	@echo "✓ Build complete: ./$(BINARY)"
 
 ## test: Run all tests
@@ -99,6 +103,14 @@ integration-test: build
 	@echo "Running integration tests..."
 	@./test.sh
 	@echo "✓ Integration tests passed"
+
+## release: Tag and release with goreleaser
+release:
+	@test -z "$$(git status --porcelain)" || (echo "error: working tree is dirty" && exit 1)
+	@echo "Tagging $(VERSION)..."
+	git tag -a $(VERSION) -m "Release $(VERSION)"
+	git push origin $(VERSION)
+	go tool goreleaser release --clean
 
 ## check: Run all checks (lint, sec, secrets)
 check: lint sec secrets
