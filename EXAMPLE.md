@@ -1,23 +1,23 @@
-# Sandcutter Example Usage
+# Sandcatter Example Usage
 
-This document demonstrates how to use sandcutter to add tmux support to a fresh sandcat installation.
+This document demonstrates how to use sandcatter to add tmux support to a fresh sandcat installation.
 
 ## Prerequisites
 
 - A working sandcat installation (see [VirtusLab/sandcat](https://github.com/VirtusLab/sandcat))
 - Go 1.21+ installed
 
-## Step 1: Build Sandcutter
+## Step 1: Build Sandcatter
 
 ```bash
-cd /path/to/sandcutter
-go build -o sandcutter .
+cd /path/to/sandcatter
+go build -o sandcatter .
 ```
 
 ## Step 2: List Available Plugins
 
 ```bash
-./sandcutter list
+./sandcatter list
 ```
 
 Output:
@@ -35,7 +35,7 @@ Available plugins (1):
 Before applying changes, it's a good idea to preview what will be modified:
 
 ```bash
-./sandcutter apply /path/to/your/sandcat-install tmux --dry-run
+./sandcatter apply /path/to/your/sandcat-install tmux --dry-run
 ```
 
 This will show you:
@@ -49,7 +49,7 @@ This will show you:
 Once you're satisfied with the preview:
 
 ```bash
-./sandcutter apply /path/to/your/sandcat-install tmux
+./sandcatter apply /path/to/your/sandcat-install tmux
 ```
 
 Output:
@@ -152,11 +152,11 @@ tmux info | grep default-terminal
 
 ## Idempotency
 
-Sandcutter is idempotent - you can run the same plugin multiple times:
+Sandcatter is idempotent - you can run the same plugin multiple times:
 
 ```bash
-./sandcutter apply /path/to/sandcat tmux
-./sandcutter apply /path/to/sandcat tmux  # Won't duplicate entries
+./sandcatter apply /path/to/sandcat tmux
+./sandcatter apply /path/to/sandcat tmux  # Won't duplicate entries
 ```
 
 The tool uses markers and checks to ensure packages and configurations aren't duplicated.
@@ -184,7 +184,7 @@ docker compose -f compose-all.yml build
 You can apply multiple plugins in one command:
 
 ```bash
-./sandcutter apply /path/to/sandcat tmux neovim zsh-config
+./sandcatter apply /path/to/sandcat tmux neovim zsh-config
 ```
 
 Each plugin will be applied in sequence.

@@ -1,4 +1,4 @@
-# Sandcutter
+# Sandcatter
 
 A Go tool for adding functionality plugins to devcontainer setups — supports both [Sandcat](https://github.com/VirtusLab/sandcat) and [Anthropic Claude Code](https://github.com/anthropics/claude-code) devcontainers.
 
@@ -7,7 +7,7 @@ A Go tool for adding functionality plugins to devcontainer setups — supports b
 Add tmux with full color support and a custom config to your devcontainer in one command:
 
 ```bash
-$ sandcutter apply .devcontainer tmux
+$ sandcatter apply . tmux
 
 ✓ Merged 3 apt packages into Dockerfile
 ✓ Added locale configuration
@@ -18,11 +18,11 @@ $ sandcutter apply .devcontainer tmux
 # That's it — rebuild your container and tmux is ready to go.
 ```
 
-No manual Dockerfile editing. No hunting for the right apt packages. No figuring out where to insert `COPY` lines. Sandcutter handles the plumbing — you just pick the plugins.
+No manual Dockerfile editing. No hunting for the right apt packages. No figuring out where to insert `COPY` lines. Sandcatter handles the plumbing — you just pick the plugins.
 
-## What is Sandcutter?
+## What is Sandcatter?
 
-Sandcutter allows you to enhance development containers by applying pre-configured plugins that modify the Dockerfile and (optionally) docker-compose configuration. Each plugin can install packages, configure fonts and locales, copy configuration files, and set environment variables.
+Sandcatter allows you to enhance development containers by applying pre-configured plugins that modify the Dockerfile and (optionally) docker-compose configuration. Each plugin can install packages, configure fonts and locales, copy configuration files, and set environment variables.
 
 ### Supported Container Types
 
@@ -32,13 +32,13 @@ Sandcutter allows you to enhance development containers by applying pre-configur
 | Compose file | `.devcontainer/compose-all.yml` | None (devcontainer.json only) |
 | Auto-detected | ✓ | ✓ |
 
-Sandcutter auto-detects which type of container it's working with — no configuration needed.
+Sandcatter auto-detects which type of container it's working with — no configuration needed.
 
 ## Installation
 
 ```bash
 # Build from source
-go build -o sandcutter .
+go build -o sandcatter .
 
 # Or install globally
 go install .
@@ -49,26 +49,26 @@ go install .
 ### List Available Plugins
 
 ```bash
-./sandcutter list
+./sandcatter list
 ```
 
 ### Scan Installed Plugins
 
 ```bash
-./sandcutter scan /path/to/devcontainer
+./sandcatter scan /path/to/devcontainer
 ```
 
 ### Apply Plugins
 
 ```bash
 # Apply single plugin
-./sandcutter apply /path/to/devcontainer tmux
+./sandcatter apply /path/to/devcontainer tmux
 
 # Apply multiple plugins
-./sandcutter apply /path/to/devcontainer tmux neovim
+./sandcatter apply /path/to/devcontainer tmux neovim
 
 # Dry run (preview changes without applying)
-./sandcutter apply /path/to/devcontainer tmux --dry-run
+./sandcatter apply /path/to/devcontainer tmux --dry-run
 ```
 
 ### After Applying Plugins
@@ -84,7 +84,7 @@ For Anthropic devcontainers (or any devcontainer.json-based setup), rebuild via 
 
 ## Available Plugins
 
-Sandcutter includes built-in plugins that are embedded in the binary, and supports user-created plugins.
+Sandcatter includes built-in plugins that are embedded in the binary, and supports user-created plugins.
 
 ### Built-in Plugins
 
@@ -157,7 +157,7 @@ plugins/
 
 ## How It Works
 
-Sandcutter modifies your devcontainer setup by:
+Sandcatter modifies your devcontainer setup by:
 
 1. **Dockerfile modifications** (Dockerfile.app or Dockerfile):
    - Merges apt packages into existing `RUN apt-get install` commands
@@ -192,7 +192,7 @@ Sandcutter modifies your devcontainer setup by:
 ## Project Structure
 
 ```
-sandcutter/
+sandcatter/
 ├── main.go                           # CLI entry point
 ├── go.mod                            # Go module definition
 ├── pkg/
@@ -238,7 +238,7 @@ make check
 make build
 
 # Or use go directly
-go build -o sandcutter .
+go build -o sandcatter .
 ```
 
 ### Available Make Targets
@@ -260,7 +260,7 @@ Run `make help` to see all available targets:
 1. Create plugin directory: `mkdir -p plugins/myplugin/files`
 2. Create `plugin.json` manifest
 3. Add configuration files to `files/` directory
-4. Test with: `./sandcutter apply ../my-devcontainer myplugin --dry-run`
+4. Test with: `./sandcatter apply ../my-devcontainer myplugin --dry-run`
 
 ## Reference Implementation
 

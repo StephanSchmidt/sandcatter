@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "=== Sandcutter Test Script ==="
+echo "=== Sandcatter Test Script ==="
 echo
 
 # Clean up any existing test directory
@@ -16,7 +16,7 @@ tar xzf fresh-sandcat.tar.gz
 
 # Apply tmux plugin
 echo "Applying tmux plugin..."
-./sandcutter apply test-sandcat tmux
+./sandcatter apply test-sandcat tmux
 
 echo
 echo "=== Verification ==="
@@ -32,7 +32,7 @@ diff -u test-sandcat/.devcontainer/compose-all.yml.backup test-sandcat/.devconta
 
 echo
 echo "=== Testing Idempotency ==="
-./sandcutter apply test-sandcat tmux >/dev/null 2>&1
+./sandcatter apply test-sandcat tmux >/dev/null 2>&1
 
 # Check for duplicates
 LOCALE_COUNT=$(grep -c "locales" test-sandcat/.devcontainer/Dockerfile.app || echo 0)

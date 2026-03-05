@@ -1,10 +1,10 @@
-# Creating Sandcutter Plugins
+# Creating Sandcatter Plugins
 
-This guide explains how to create custom user plugins for sandcutter.
+This guide explains how to create custom user plugins for sandcatter.
 
 ## Built-in vs User Plugins
 
-Sandcutter includes **built-in plugins** that are embedded in the binary:
+Sandcatter includes **built-in plugins** that are embedded in the binary:
 - Always available, no installation needed
 - Currently includes: `tmux`
 
@@ -61,7 +61,7 @@ The `plugin.json` file defines what the plugin does. Here's a complete example:
 
 - **name** (string): Unique identifier for the plugin (lowercase, alphanumeric, hyphens/underscores allowed)
 - **version** (string): Semantic version (e.g., "1.0.0", "2.1.3")
-- **description** (string): Brief description shown in `sandcutter list`
+- **description** (string): Brief description shown in `sandcatter list`
 
 ### Optional Fields
 
@@ -72,7 +72,7 @@ Debian packages to install via `apt-get install`. These are merged into the exis
 "apt_packages": ["tmux", "vim", "curl"]
 ```
 
-**Important:** Sandcutter checks for duplicates, so if a package is already installed, it won't be added again.
+**Important:** Sandcatter checks for duplicates, so if a package is already installed, it won't be added again.
 
 #### fonts (array of strings)
 Font packages to install. These are treated the same as `apt_packages` but kept separate for clarity.
@@ -289,11 +289,11 @@ Add comments to your config files explaining what each setting does. Users will 
 Your plugin should be safe to apply multiple times:
 
 ```bash
-./sandcutter apply /path/to/sandcat myplugin
-./sandcutter apply /path/to/sandcat myplugin  # Should not break
+./sandcatter apply /path/to/sandcat myplugin
+./sandcatter apply /path/to/sandcat myplugin  # Should not break
 ```
 
-Sandcutter handles this automatically, but test to be sure.
+Sandcatter handles this automatically, but test to be sure.
 
 ### 6. Consider Dependencies
 
@@ -313,17 +313,17 @@ Bad: `plugin1`, `stuff`, `misc`
 
 2. **Check plugin loads:**
    ```bash
-   ./sandcutter list
+   ./sandcatter list
    ```
 
 3. **Test with dry-run:**
    ```bash
-   ./sandcutter apply /path/to/sandcat myplugin --dry-run
+   ./sandcatter apply /path/to/sandcat myplugin --dry-run
    ```
 
 4. **Apply to test installation:**
    ```bash
-   ./sandcutter apply /path/to/test-sandcat myplugin
+   ./sandcatter apply /path/to/test-sandcat myplugin
    ```
 
 5. **Rebuild and verify:**
@@ -351,7 +351,7 @@ Here are some plugin ideas to get you started:
 
 If you create a useful plugin, consider contributing it back:
 
-1. Fork the sandcutter repository
+1. Fork the sandcatter repository
 2. Add your plugin to `plugins/`
 3. Test thoroughly
 4. Submit a pull request with:

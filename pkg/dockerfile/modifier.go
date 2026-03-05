@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	SandcutterMarker = "# sandcutter:managed"
+	SandcatterMarker = "# sandcatter:managed"
 )
 
 var (
@@ -118,7 +118,7 @@ func (d *Dockerfile) AddAptPackages(packages []string, pluginName string) error 
 	}
 
 	// Check if this plugin's packages are already added
-	startMarker := fmt.Sprintf("# sandcutter:plugin:%s:start", pluginName)
+	startMarker := fmt.Sprintf("# sandcatter:plugin:%s:start", pluginName)
 	for _, line := range d.Lines {
 		if strings.Contains(line, startMarker) {
 			// Plugin packages already added
@@ -184,13 +184,13 @@ func (d *Dockerfile) AddAptPackages(packages []string, pluginName string) error 
 	// Check if the next line continues the RUN command (e.g. && or another plugin block)
 	nextLine := strings.TrimSpace(d.Lines[insertIdx])
 	needsContinuation := strings.HasPrefix(nextLine, "&&") ||
-		strings.HasPrefix(nextLine, "# sandcutter:plugin:")
+		strings.HasPrefix(nextLine, "# sandcatter:plugin:")
 
 	// Build the lines to insert with markers
 	var linesToInsert []string
 
 	// Add start marker (always needs continuation since packages follow)
-	startMarkerLine := fmt.Sprintf("%s# sandcutter:plugin:%s:start \\", indent, pluginName)
+	startMarkerLine := fmt.Sprintf("%s# sandcatter:plugin:%s:start \\", indent, pluginName)
 	linesToInsert = append(linesToInsert, startMarkerLine)
 
 	// Insert the new packages (all get backslash continuation)
@@ -200,9 +200,9 @@ func (d *Dockerfile) AddAptPackages(packages []string, pluginName string) error 
 
 	// Add end marker
 	if needsContinuation {
-		linesToInsert = append(linesToInsert, fmt.Sprintf("%s# sandcutter:plugin:%s:end \\", indent, pluginName))
+		linesToInsert = append(linesToInsert, fmt.Sprintf("%s# sandcatter:plugin:%s:end \\", indent, pluginName))
 	} else {
-		linesToInsert = append(linesToInsert, fmt.Sprintf("%s# sandcutter:plugin:%s:end", indent, pluginName))
+		linesToInsert = append(linesToInsert, fmt.Sprintf("%s# sandcatter:plugin:%s:end", indent, pluginName))
 	}
 
 	// Insert all lines at once
@@ -243,7 +243,7 @@ func (d *Dockerfile) AddLocaleSetup(locale string) error {
 	// Add locale configuration
 	localeLines := []string{
 		"",
-		"# Configure locale for UTF-8 support (sandcutter:managed)",
+		"# Configure locale for UTF-8 support (sandcatter:managed)",
 		fmt.Sprintf("RUN sed -i '/%s/s/^# //g' /etc/locale.gen \\", strings.Replace(locale, ".", "\\.", -1)),
 		"    && locale-gen",
 		fmt.Sprintf("ENV LANG=%s LANGUAGE=%s LC_ALL=%s", locale, strings.Split(locale, ".")[0]+":en", locale),
@@ -257,8 +257,8 @@ func (d *Dockerfile) AddLocaleSetup(locale string) error {
 
 // AddRunCommands adds RUN commands before file COPY markers and ENTRYPOINT
 func (d *Dockerfile) AddRunCommands(commands []string, pluginName string) error {
-	startMarker := fmt.Sprintf("# sandcutter:run:%s:start", pluginName)
-	endMarker := fmt.Sprintf("# sandcutter:run:%s:end", pluginName)
+	startMarker := fmt.Sprintf("# sandcatter:run:%s:start", pluginName)
+	endMarker := fmt.Sprintf("# sandcatter:run:%s:end", pluginName)
 
 	// Check if already exists (idempotent)
 	for _, line := range d.Lines {
@@ -267,7 +267,7 @@ func (d *Dockerfile) AddRunCommands(commands []string, pluginName string) error 
 		}
 	}
 
-	// Find insertion point: before the first sandcutter:file marker before ENTRYPOINT,
+	// Find insertion point: before the first sandcatter:file marker before ENTRYPOINT,
 	// or before ENTRYPOINT if no file markers exist
 	insertIdx := len(d.Lines)
 	for i, line := range d.Lines {
@@ -287,10 +287,10 @@ func (d *Dockerfile) AddRunCommands(commands []string, pluginName string) error 
 		}
 	}
 
-	// Scan backward from insertion point to find the first sandcutter:file marker block
+	// Scan backward from insertion point to find the first sandcatter:file marker block
 	for i := insertIdx - 1; i >= 0; i-- {
 		trimmed := strings.TrimSpace(d.Lines[i])
-		if strings.HasPrefix(trimmed, "# sandcutter:file:") {
+		if strings.HasPrefix(trimmed, "# sandcatter:file:") {
 			insertIdx = i
 			continue
 		}
@@ -316,7 +316,7 @@ func (d *Dockerfile) AddRunCommands(commands []string, pluginName string) error 
 
 // AddCopyCommand adds a COPY command for a file
 func (d *Dockerfile) AddCopyCommand(source, destination, chmod string) error {
-	marker := fmt.Sprintf("# sandcutter:file:%s", destination)
+	marker := fmt.Sprintf("# sandcatter:file:%s", destination)
 
 	// Check if already exists
 	for _, line := range d.Lines {
@@ -359,8 +359,8 @@ func (d *Dockerfile) AddCopyCommand(source, destination, chmod string) error {
 
 // AddDockerEnv adds ENV instructions to the Dockerfile
 func (d *Dockerfile) AddDockerEnv(envVars map[string]string, pluginName string) error {
-	startMarker := fmt.Sprintf("# sandcutter:env:%s:start", pluginName)
-	endMarker := fmt.Sprintf("# sandcutter:env:%s:end", pluginName)
+	startMarker := fmt.Sprintf("# sandcatter:env:%s:start", pluginName)
+	endMarker := fmt.Sprintf("# sandcatter:env:%s:end", pluginName)
 
 	// Check if already exists (idempotent)
 	for _, line := range d.Lines {
@@ -370,7 +370,7 @@ func (d *Dockerfile) AddDockerEnv(envVars map[string]string, pluginName string) 
 	}
 
 	// Preferred insertion point: right after the run block end marker for this plugin
-	runEndMarker := fmt.Sprintf("# sandcutter:run:%s:end", pluginName)
+	runEndMarker := fmt.Sprintf("# sandcatter:run:%s:end", pluginName)
 	insertIdx := -1
 	for i, line := range d.Lines {
 		if strings.TrimSpace(line) == runEndMarker {
@@ -399,10 +399,10 @@ func (d *Dockerfile) AddDockerEnv(envVars map[string]string, pluginName string) 
 			}
 		}
 
-		// Scan backward from insertion point to find sandcutter:file marker blocks
+		// Scan backward from insertion point to find sandcatter:file marker blocks
 		for i := insertIdx - 1; i >= 0; i-- {
 			trimmed := strings.TrimSpace(d.Lines[i])
-			if strings.HasPrefix(trimmed, "# sandcutter:file:") {
+			if strings.HasPrefix(trimmed, "# sandcatter:file:") {
 				insertIdx = i
 				continue
 			}
@@ -435,13 +435,13 @@ type InstalledPlugin struct {
 	Env      bool
 }
 
-// ScanResult holds the results of scanning a Dockerfile for sandcutter markers
+// ScanResult holds the results of scanning a Dockerfile for sandcatter markers
 type ScanResult struct {
 	Plugins []InstalledPlugin
 	Files   []string
 }
 
-// ScanPlugins scans the Dockerfile for sandcutter markers and returns installed plugins
+// ScanPlugins scans the Dockerfile for sandcatter markers and returns installed plugins
 func (d *Dockerfile) ScanPlugins() ScanResult {
 	plugins := make(map[string]*InstalledPlugin)
 	var files []string
@@ -460,17 +460,17 @@ func (d *Dockerfile) ScanPlugins() ScanResult {
 		// Strip trailing backslash for inline markers within apt blocks
 		trimmed = strings.TrimSuffix(trimmed, " \\")
 
-		if strings.HasPrefix(trimmed, "# sandcutter:plugin:") && strings.HasSuffix(trimmed, ":start") {
-			name := trimmed[len("# sandcutter:plugin:") : len(trimmed)-len(":start")]
+		if strings.HasPrefix(trimmed, "# sandcatter:plugin:") && strings.HasSuffix(trimmed, ":start") {
+			name := trimmed[len("# sandcatter:plugin:") : len(trimmed)-len(":start")]
 			getOrCreate(name).Packages = true
-		} else if strings.HasPrefix(trimmed, "# sandcutter:run:") && strings.HasSuffix(trimmed, ":start") {
-			name := trimmed[len("# sandcutter:run:") : len(trimmed)-len(":start")]
+		} else if strings.HasPrefix(trimmed, "# sandcatter:run:") && strings.HasSuffix(trimmed, ":start") {
+			name := trimmed[len("# sandcatter:run:") : len(trimmed)-len(":start")]
 			getOrCreate(name).Run = true
-		} else if strings.HasPrefix(trimmed, "# sandcutter:env:") && strings.HasSuffix(trimmed, ":start") {
-			name := trimmed[len("# sandcutter:env:") : len(trimmed)-len(":start")]
+		} else if strings.HasPrefix(trimmed, "# sandcatter:env:") && strings.HasSuffix(trimmed, ":start") {
+			name := trimmed[len("# sandcatter:env:") : len(trimmed)-len(":start")]
 			getOrCreate(name).Env = true
-		} else if strings.HasPrefix(trimmed, "# sandcutter:file:") {
-			path := trimmed[len("# sandcutter:file:"):]
+		} else if strings.HasPrefix(trimmed, "# sandcatter:file:") {
+			path := trimmed[len("# sandcatter:file:"):]
 			files = append(files, path)
 		}
 	}
@@ -483,11 +483,11 @@ func (d *Dockerfile) ScanPlugins() ScanResult {
 	return ScanResult{Plugins: result, Files: files}
 }
 
-// RemovePluginPackages removes lines between sandcutter:plugin:<name>:start and :end markers (inclusive),
+// RemovePluginPackages removes lines between sandcatter:plugin:<name>:start and :end markers (inclusive),
 // adjusting backslash continuations on the preceding line as needed.
 func (d *Dockerfile) RemovePluginPackages(pluginName string) {
-	startMarker := fmt.Sprintf("# sandcutter:plugin:%s:start", pluginName)
-	endMarker := fmt.Sprintf("# sandcutter:plugin:%s:end", pluginName)
+	startMarker := fmt.Sprintf("# sandcatter:plugin:%s:start", pluginName)
+	endMarker := fmt.Sprintf("# sandcatter:plugin:%s:end", pluginName)
 
 	startIdx := -1
 	endIdx := -1
@@ -513,7 +513,7 @@ func (d *Dockerfile) RemovePluginPackages(pluginName string) {
 	if followingIdx < len(d.Lines) {
 		followingTrimmed := strings.TrimSpace(d.Lines[followingIdx])
 		needsBackslash = strings.HasPrefix(followingTrimmed, "&&") ||
-			strings.HasPrefix(followingTrimmed, "# sandcutter:plugin:")
+			strings.HasPrefix(followingTrimmed, "# sandcatter:plugin:")
 	}
 
 	// Remove the block
@@ -539,17 +539,17 @@ func (d *Dockerfile) RemovePluginPackages(pluginName string) {
 	}
 }
 
-// RemoveRunCommands removes lines between sandcutter:run:<name>:start and :end markers (inclusive).
+// RemoveRunCommands removes lines between sandcatter:run:<name>:start and :end markers (inclusive).
 func (d *Dockerfile) RemoveRunCommands(pluginName string) {
-	startMarker := fmt.Sprintf("# sandcutter:run:%s:start", pluginName)
-	endMarker := fmt.Sprintf("# sandcutter:run:%s:end", pluginName)
+	startMarker := fmt.Sprintf("# sandcatter:run:%s:start", pluginName)
+	endMarker := fmt.Sprintf("# sandcatter:run:%s:end", pluginName)
 	d.removeMarkerBlock(startMarker, endMarker)
 }
 
-// RemoveDockerEnv removes lines between sandcutter:env:<name>:start and :end markers (inclusive).
+// RemoveDockerEnv removes lines between sandcatter:env:<name>:start and :end markers (inclusive).
 func (d *Dockerfile) RemoveDockerEnv(pluginName string) {
-	startMarker := fmt.Sprintf("# sandcutter:env:%s:start", pluginName)
-	endMarker := fmt.Sprintf("# sandcutter:env:%s:end", pluginName)
+	startMarker := fmt.Sprintf("# sandcatter:env:%s:start", pluginName)
+	endMarker := fmt.Sprintf("# sandcatter:env:%s:end", pluginName)
 	d.removeMarkerBlock(startMarker, endMarker)
 }
 
@@ -575,9 +575,9 @@ func (d *Dockerfile) removeMarkerBlock(startMarker, endMarker string) {
 	d.Lines = append(d.Lines[:startIdx], d.Lines[endIdx+1:]...)
 }
 
-// RemoveCopyCommand finds the sandcutter:file:<destination> marker and the COPY line after it, removing both.
+// RemoveCopyCommand finds the sandcatter:file:<destination> marker and the COPY line after it, removing both.
 func (d *Dockerfile) RemoveCopyCommand(destination string) {
-	marker := fmt.Sprintf("# sandcutter:file:%s", destination)
+	marker := fmt.Sprintf("# sandcatter:file:%s", destination)
 
 	for i, line := range d.Lines {
 		if strings.TrimSpace(line) == marker {

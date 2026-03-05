@@ -1,6 +1,6 @@
 # Testing Guide
 
-Sandcutter includes comprehensive unit and integration tests to ensure reliability.
+Sandcatter includes comprehensive unit and integration tests to ensure reliability.
 
 ## Test Structure
 
@@ -332,7 +332,7 @@ if got != want {
 
 ### Integration test fails
 - Verify fresh-sandcat.tar.gz exists
-- Check sandcutter binary is built
+- Check sandcatter binary is built
 - Run with bash -x ./test.sh for debugging
 
 ### Coverage report not generating
