@@ -1,4 +1,4 @@
-module github.com/sandcutter/sandcutter
+module github.com/StephanSchmidt/sandcatter
 
 go 1.25.6
 
