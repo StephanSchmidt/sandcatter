@@ -1,10 +1,20 @@
 # Sandcutter
 
-A Go tool for adding functionality plugins to existing [Sandcat](https://github.com/VirtusLab/sandcat) installations.
+A Go tool for adding functionality plugins to devcontainer setups — supports both [Sandcat](https://github.com/VirtusLab/sandcat) and [Anthropic Claude Code](https://github.com/anthropics/claude-code) devcontainers.
 
 ## What is Sandcutter?
 
-Sandcutter allows you to enhance Sandcat development containers by applying pre-configured plugins that modify the Dockerfile and docker-compose configuration. Each plugin can install packages, configure fonts and locales, copy configuration files, and set environment variables.
+Sandcutter allows you to enhance development containers by applying pre-configured plugins that modify the Dockerfile and (optionally) docker-compose configuration. Each plugin can install packages, configure fonts and locales, copy configuration files, and set environment variables.
+
+### Supported Container Types
+
+| | Sandcat | Anthropic Claude Code |
+|---|---|---|
+| Dockerfile | `.devcontainer/Dockerfile.app` | `.devcontainer/Dockerfile` |
+| Compose file | `.devcontainer/compose-all.yml` | None (devcontainer.json only) |
+| Auto-detected | ✓ | ✓ |
+
+Sandcutter auto-detects which type of container it's working with — no configuration needed.
 
 ## Installation
 
@@ -24,27 +34,35 @@ go install .
 ./sandcutter list
 ```
 
+### Scan Installed Plugins
+
+```bash
+./sandcutter scan /path/to/devcontainer
+```
+
 ### Apply Plugins
 
 ```bash
 # Apply single plugin
-./sandcutter apply /path/to/sandcat-install tmux
+./sandcutter apply /path/to/devcontainer tmux
 
 # Apply multiple plugins
-./sandcutter apply /path/to/sandcat-install tmux neovim
+./sandcutter apply /path/to/devcontainer tmux neovim
 
 # Dry run (preview changes without applying)
-./sandcutter apply /path/to/sandcat-install tmux --dry-run
+./sandcutter apply /path/to/devcontainer tmux --dry-run
 ```
 
 ### After Applying Plugins
 
-Rebuild your container to apply the changes:
+Rebuild your container to apply the changes. For sandcat installations:
 
 ```bash
 cd /path/to/sandcat-install
 docker compose -f .devcontainer/compose-all.yml build
 ```
+
+For Anthropic devcontainers (or any devcontainer.json-based setup), rebuild via your IDE or the devcontainer CLI.
 
 ## Available Plugins
 
@@ -124,22 +142,24 @@ plugins/
   - **source**: Path relative to plugin directory
   - **destination**: Absolute path in container
   - **chmod**: File permissions (e.g., "644", "755")
-- **compose_env**: Environment variables to add to docker-compose.yml
+- **compose_env**: Environment variables to add to docker-compose.yml (only applied when a compose file exists)
 - **locale_setup**: Locale configuration
   - **locale**: Locale name (e.g., "en_US.UTF-8")
   - **generate**: Whether to run locale-gen
 
 ## How It Works
 
-Sandcutter modifies your sandcat installation by:
+Sandcutter modifies your devcontainer setup by:
 
-1. **Dockerfile.app modifications:**
+1. **Dockerfile modifications** (Dockerfile.app or Dockerfile):
    - Merges apt packages into existing `RUN apt-get install` commands
    - Adds locale generation commands
-   - Adds `COPY` commands for configuration files
+   - Adds `RUN`, `COPY`, and `ENV` commands for plugin configuration
+   - Inserts commands before `ENTRYPOINT` (sandcat) or before the final `USER` line (Anthropic), keeping them in root context
 
-2. **compose-all.yml modifications:**
+2. **Compose file modifications** (when present):
    - Adds environment variables to the app service
+   - Sets compose command if specified by the plugin
 
 3. **File copying:**
    - Copies plugin files to `.devcontainer/` directory
@@ -156,7 +176,7 @@ Sandcutter modifies your sandcat installation by:
 ## Safety Features
 
 - **Backups:** Original files are saved with `.backup` extension
-- **Validation:** Checks that target directory is a valid sandcat installation
+- **Validation:** Checks that target directory contains a recognized devcontainer Dockerfile
 - **Dry run:** Preview changes before applying with `--dry-run`
 - **Idempotency markers:** Prevents duplicate entries
 - **Non-destructive merging:** Adds to existing configuration, doesn't replace
@@ -232,7 +252,7 @@ Run `make help` to see all available targets:
 1. Create plugin directory: `mkdir -p plugins/myplugin/files`
 2. Create `plugin.json` manifest
 3. Add configuration files to `files/` directory
-4. Test with: `./sandcutter apply ../test-sandcat myplugin --dry-run`
+4. Test with: `./sandcutter apply ../my-devcontainer myplugin --dry-run`
 
 ## Reference Implementation
 
