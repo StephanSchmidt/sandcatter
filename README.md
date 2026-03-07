@@ -37,11 +37,17 @@ Sandcatter auto-detects which type of container it's working with — no configu
 ## Installation
 
 ```bash
-# Build from source
-go build -o sandcatter .
+# One-line install (Linux/macOS)
+curl -sSfL https://raw.githubusercontent.com/StephanSchmidt/sandcatter/main/install.sh | bash
 
-# Or install globally
-go install .
+# Or build from source
+go build -o sandcatter .
+```
+
+You can set a custom install directory with `INSTALL_DIR`:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/StephanSchmidt/sandcatter/main/install.sh | INSTALL_DIR=~/.local/bin bash
 ```
 
 ## Usage
