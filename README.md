@@ -144,30 +144,6 @@ Sandcatter modifies your devcontainer setup by:
 - **Idempotency markers:** Prevents duplicate entries
 - **Non-destructive merging:** Adds to existing configuration, doesn't replace
 
-## Project Structure
-
-```
-sandcatter/
-├── main.go                           # CLI entry point
-├── go.mod                            # Go module definition
-├── pkg/
-│   ├── builtin/                      # Built-in plugins (embedded)
-│   │   ├── embed.go                 # Embed directive
-│   │   └── plugins/
-│   │       └── tmux/                # Built-in tmux plugin
-│   │           ├── plugin.json
-│   │           └── files/
-│   │               └── tmux.conf
-│   ├── plugin/
-│   │   ├── plugin.go                # Plugin loading and parsing
-│   │   └── applier.go               # Plugin application logic
-│   └── dockerfile/
-│       ├── modifier.go              # Dockerfile modification
-│       └── compose.go               # Compose file modification
-└── plugins/                          # User plugins directory
-    └── .gitkeep                     # Keeps directory tracked
-```
-
 ## License
 
 MIT
