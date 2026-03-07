@@ -55,26 +55,26 @@ curl -sSfL https://raw.githubusercontent.com/StephanSchmidt/sandcatter/main/inst
 ### List Available Plugins
 
 ```bash
-./sandcatter list
+sandcatter list
 ```
 
 ### Scan Installed Plugins
 
 ```bash
-./sandcatter scan /path/to/devcontainer
+sandcatter scan /path/to/devcontainer
 ```
 
 ### Apply Plugins
 
 ```bash
 # Apply single plugin
-./sandcatter apply /path/to/devcontainer tmux
+sandcatter apply /path/to/devcontainer tmux
 
 # Apply multiple plugins
-./sandcatter apply /path/to/devcontainer tmux neovim
+sandcatter apply /path/to/devcontainer tmux neovim
 
 # Dry run (preview changes without applying)
-./sandcatter apply /path/to/devcontainer tmux --dry-run
+sandcatter apply /path/to/devcontainer tmux --dry-run
 ```
 
 ### After Applying Plugins
@@ -215,7 +215,7 @@ Run `make help` to see all available targets:
 1. Create plugin directory: `mkdir -p plugins/myplugin/files`
 2. Create `plugin.json` manifest
 3. Add configuration files to `files/` directory
-4. Test with: `./sandcatter apply ../my-devcontainer myplugin --dry-run`
+4. Test with: `sandcatter apply ../my-devcontainer myplugin --dry-run`
 
 ## Reference Implementation
 
