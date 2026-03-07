@@ -324,6 +324,133 @@ func (c *ComposeFile) RemoveComposeCommand() error {
 	return nil
 }
 
+// AddVolumes adds volume mounts to the app service
+func (c *ComposeFile) AddVolumes(volumes []string) error {
+	if len(volumes) == 0 {
+		return nil
+	}
+
+	// Find the app service and its volumes section
+	inAppService := false
+	volumesSectionIdx := -1
+	appServiceIdx := -1
+	volIndent := ""
+
+	for i, line := range c.Lines {
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "app:") {
+			inAppService = true
+			appServiceIdx = i
+			continue
+		}
+
+		// Left the app service
+		if inAppService && len(trimmed) > 0 && !strings.HasPrefix(line, " ") && strings.Contains(trimmed, ":") {
+			inAppService = false
+			break
+		}
+
+		if inAppService && strings.HasPrefix(trimmed, "volumes:") {
+			volumesSectionIdx = i
+			indent := len(line) - len(strings.TrimLeft(line, " "))
+			volIndent = strings.Repeat(" ", indent+2)
+			continue
+		}
+	}
+
+	if appServiceIdx == -1 {
+		return fmt.Errorf("could not find app service in compose file")
+	}
+
+	// If no volumes section exists, create one
+	if volumesSectionIdx == -1 {
+		insertIdx := appServiceIdx + 1
+		for i := appServiceIdx + 1; i < len(c.Lines); i++ {
+			line := c.Lines[i]
+			trimmed := strings.TrimSpace(line)
+			if len(trimmed) > 0 && !strings.HasPrefix(line, " ") && strings.Contains(trimmed, ":") {
+				break
+			}
+			insertIdx = i + 1
+		}
+
+		volIndent = "      " // 6 spaces
+		newLines := []string{"    volumes:"}
+		c.Lines = append(c.Lines[:insertIdx], append(newLines, c.Lines[insertIdx:]...)...)
+		volumesSectionIdx = insertIdx
+	}
+
+	// Find end of volumes section
+	insertIdx := volumesSectionIdx + 1
+	for i := volumesSectionIdx + 1; i < len(c.Lines); i++ {
+		line := c.Lines[i]
+		trimmed := strings.TrimSpace(line)
+
+		if len(trimmed) == 0 {
+			break
+		}
+
+		currentIndent := len(line) - len(strings.TrimLeft(line, " "))
+		volBaseIndent := len(volIndent) - 2
+		if currentIndent <= volBaseIndent {
+			break
+		}
+
+		insertIdx = i + 1
+	}
+
+	// Add new volumes
+	var newLines []string
+	for _, vol := range volumes {
+		// Check if volume already exists
+		exists := false
+		for _, line := range c.Lines {
+			if strings.Contains(line, vol) {
+				exists = true
+				break
+			}
+		}
+
+		if !exists {
+			newLines = append(newLines, fmt.Sprintf("%s- %s", volIndent, vol))
+		}
+	}
+
+	if len(newLines) > 0 {
+		c.Lines = append(c.Lines[:insertIdx], append(newLines, c.Lines[insertIdx:]...)...)
+	}
+
+	return nil
+}
+
+// RemoveVolumes removes specific volume mounts from the app service.
+func (c *ComposeFile) RemoveVolumes(volumes []string) error {
+	if len(volumes) == 0 {
+		return nil
+	}
+
+	volSet := make(map[string]bool)
+	for _, v := range volumes {
+		volSet[v] = true
+	}
+
+	var newLines []string
+	for _, line := range c.Lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- ") {
+			entry := strings.TrimPrefix(trimmed, "- ")
+			if volSet[entry] {
+				continue
+			}
+		}
+		newLines = append(newLines, line)
+	}
+
+	c.Lines = newLines
+	return nil
+}
+
 // GetContent returns the compose file content as a string
 func (c *ComposeFile) GetContent() string {
 	return strings.Join(c.Lines, "\n") + "\n"

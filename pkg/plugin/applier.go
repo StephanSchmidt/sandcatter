@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -133,8 +134,14 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 	// Apply run commands
 	if len(plugin.RunCommands) > 0 {
 		fmt.Printf("Adding RUN commands: %d command(s)\n", len(plugin.RunCommands))
-		if err := df.AddRunCommands(plugin.RunCommands, plugin.Name); err != nil {
-			return fmt.Errorf("failed to add RUN commands: %w", err)
+		if plugin.RunAs == "user" {
+			if err := df.AddUserRunCommands(plugin.RunCommands, plugin.Name); err != nil {
+				return fmt.Errorf("failed to add user RUN commands: %w", err)
+			}
+		} else {
+			if err := df.AddRunCommands(plugin.RunCommands, plugin.Name); err != nil {
+				return fmt.Errorf("failed to add RUN commands: %w", err)
+			}
 		}
 	}
 
@@ -182,6 +189,23 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 		}
 	}
 
+	// Apply compose volumes
+	if compose != nil && len(plugin.ComposeVolumes) > 0 {
+		fmt.Printf("Adding volumes: %v\n", plugin.ComposeVolumes)
+		if err := compose.AddVolumes(plugin.ComposeVolumes); err != nil {
+			return fmt.Errorf("failed to add volumes: %w", err)
+		}
+	}
+
+	// Rewrite Claude plugin config files for container paths
+	if hasClaudeVolumes(plugin) && !dryRun {
+		hostHome, _ := os.UserHomeDir()
+		containerHome := "/home/vscode"
+		if err := RewriteClaudeConfig(hostHome, containerHome, devcontainerDir); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to rewrite Claude config: %v\n", err)
+		}
+	}
+
 	// Apply compose command
 	if compose != nil && plugin.ComposeCommand != "" {
 		fmt.Printf("Setting compose command: %s\n", plugin.ComposeCommand)
@@ -213,6 +237,10 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 		}
 
 		fmt.Println("\n✓ Plugin applied successfully!")
+		if plugin.PostInstallMessage != "" {
+			fmt.Println("\nPost-install instructions:")
+			fmt.Println(plugin.PostInstallMessage)
+		}
 		fmt.Println("\nBackups saved with .backup extension")
 		if a.ComposePath != "" {
 			composeCmd, err := detectComposeCommand()
@@ -225,6 +253,10 @@ func (a *Applier) Apply(plugin *Plugin, dryRun bool) error {
 				fmt.Printf("  cd %s && %s -f .devcontainer/%s run --rm --build app\n", a.TargetDir, composeCmd, composeName)
 			} else {
 				fmt.Printf("  %s -f .devcontainer/%s run --rm --build app\n", composeCmd, composeName)
+			}
+
+			if compose != nil && hasHomeVolume(compose) {
+				a.promptDeleteHomeVolume(composeCmd, composeName)
 			}
 		}
 	}
@@ -288,6 +320,27 @@ func (a *Applier) Remove(plugin *Plugin, dryRun bool) error {
 		fmt.Printf("Removed compose environment variables: %s\n", strings.Join(mapKeys(plugin.ComposeEnv), ", "))
 	}
 
+	// Remove compose volumes
+	if compose != nil && len(plugin.ComposeVolumes) > 0 {
+		if err := compose.RemoveVolumes(plugin.ComposeVolumes); err != nil {
+			return fmt.Errorf("failed to remove volumes: %w", err)
+		}
+		fmt.Printf("Removed compose volumes: %v\n", plugin.ComposeVolumes)
+	}
+
+	// Remove rewritten Claude config files
+	if hasClaudeVolumes(plugin) && !dryRun {
+		devcontainerDir := filepath.Join(a.TargetDir, ".devcontainer")
+		for _, name := range []string{"installed_plugins.json", "known_marketplaces.json", "settings.json"} {
+			p := filepath.Join(devcontainerDir, name)
+			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "Warning: could not remove %s: %v\n", p, err)
+			} else if err == nil {
+				fmt.Printf("Deleted file: %s\n", p)
+			}
+		}
+	}
+
 	// Remove compose command
 	if compose != nil && plugin.ComposeCommand != "" {
 		if err := compose.RemoveComposeCommand(); err != nil {
@@ -321,6 +374,65 @@ func (a *Applier) Remove(plugin *Plugin, dryRun bool) error {
 	}
 
 	return nil
+}
+
+// hasHomeVolume checks whether the compose file mounts a named volume on /home/vscode.
+func hasHomeVolume(compose *dockerfile.ComposeFile) bool {
+	for _, line := range strings.Split(compose.GetContent(), "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Match lines like "- app-home:/home/vscode"
+		if strings.HasPrefix(trimmed, "- ") {
+			entry := strings.TrimPrefix(trimmed, "- ")
+			parts := strings.SplitN(entry, ":", 2)
+			if len(parts) == 2 {
+				src := parts[0]
+				dst := strings.Split(parts[1], ":")[0] // strip :ro etc.
+				if dst == "/home/vscode" && !strings.HasPrefix(src, "/") && !strings.HasPrefix(src, ".") && !strings.HasPrefix(src, "~") && !strings.HasPrefix(src, "$") {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// promptDeleteHomeVolume asks the user whether to remove the home volume
+// so that a rebuilt image can populate it with newly installed tools.
+func (a *Applier) promptDeleteHomeVolume(composeCmd, composeName string) {
+	fmt.Println("\nThe compose file uses a persistent home volume (app-home).")
+	fmt.Println("Docker keeps old volume contents across rebuilds, so new tools")
+	fmt.Println("installed by this plugin won't be visible until the volume is deleted.")
+	fmt.Printf("\nDelete it now?  %s -f .devcontainer/%s down -v  [y/N] ", composeCmd, composeName)
+
+	reader := bufio.NewReader(os.Stdin)
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(strings.ToLower(answer))
+
+	if answer == "y" || answer == "yes" {
+		args := strings.Fields(composeCmd)
+		args = append(args, "-f", filepath.Join(".devcontainer", composeName), "down", "-v")
+
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = a.TargetDir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to remove volumes: %v\n", err)
+		} else {
+			fmt.Println("Volumes removed.")
+		}
+	}
+}
+
+// hasClaudeVolumes returns true if any compose volume mounts into a .claude path.
+func hasClaudeVolumes(plugin *Plugin) bool {
+	for _, v := range plugin.ComposeVolumes {
+		if strings.Contains(v, ".claude") {
+			return true
+		}
+	}
+	return false
 }
 
 func mapKeys(m map[string]string) []string {

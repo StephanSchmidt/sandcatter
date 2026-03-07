@@ -1,0 +1,18 @@
+{
+  "name": "golsp",
+  "version": "1.0.0",
+  "description": "Go language server (gopls) for Claude Code LSP support",
+  "apt_packages": ["bison"],
+  "run_commands": [
+    "bash -c 'curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer | bash && source /home/vscode/.gvm/scripts/gvm && gvm install go1.25.7 -B && gvm use go1.25.7 --default && go install golang.org/x/tools/gopls@latest'"
+  ],
+  "run_as": "user",
+  "env": {
+    "ENABLE_LSP_TOOL": "1",
+    "PATH": "/home/vscode/.gvm/gos/go1.25.7/bin:/home/vscode/go/bin:$PATH"
+  },
+  "compose_env": {
+    "ENABLE_LSP_TOOL": "1"
+  },
+  "post_install_message": "To enable gopls inside the container, run this command in Claude Code:\n  /plugin install gopls-lsp@claude-plugins-official\n\nFor more information on LSP plugins: https://www.amazingcto.com/lsp-in-claude/"
+}

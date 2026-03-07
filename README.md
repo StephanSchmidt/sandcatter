@@ -92,6 +92,7 @@ Sandcatter includes built-in plugins that are embedded in the binary, and suppor
 |--------|-------------|
 | **tmux** | Terminal multiplexer with 256-color/true color support, mouse integration, custom keybindings, and fonts. Config: `.devcontainer/tmux.conf` |
 | **claude-tools** | Installs Homebrew and development tools (build-essential, procps) for Claude Code containers. Sets up PATH for linuxbrew. |
+| **golsp** | Go language server ([gopls](https://pkg.go.dev/golang.org/x/tools/gopls)) for [Claude Code LSP support](https://www.amazingcto.com/lsp-in-claude/). Installs Go via GVM and sets up gopls. |
 
 ### User Plugins
 

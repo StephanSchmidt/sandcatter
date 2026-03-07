@@ -26,10 +26,10 @@ RUN apt-get update \
 			want: `FROM debian
 RUN apt-get update \
     && apt-get install -y --no-install-recommends vim \
-    # sandcutter:plugin:test-plugin:start \
+    # sandcatter:plugin:test-plugin:start \
     tmux \
     curl \
-    # sandcutter:plugin:test-plugin:end \
+    # sandcatter:plugin:test-plugin:end \
     && rm -rf /var/lib/apt/lists/*`,
 		},
 		{
@@ -45,10 +45,10 @@ RUN apt-get update \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         gh gosu jq vim \
-        # sandcutter:plugin:tmux:start \
+        # sandcatter:plugin:tmux:start \
         tmux \
         fonts-dejavu \
-        # sandcutter:plugin:tmux:end \
+        # sandcatter:plugin:tmux:end \
     && rm -rf /var/lib/apt/lists/*`,
 		},
 		{
@@ -62,9 +62,9 @@ RUN apt-get update \
 			want: `FROM debian
 RUN apt-get update \
     && apt-get install -y vim tmux \
-    # sandcutter:plugin:test-plugin:start \
+    # sandcatter:plugin:test-plugin:start \
     curl \
-    # sandcutter:plugin:test-plugin:end \
+    # sandcatter:plugin:test-plugin:end \
     && rm -rf /var/lib/apt/lists/*`,
 		},
 		{
@@ -154,10 +154,10 @@ RUN apt-get update \
 	}
 
 	// Verify markers are present
-	if !strings.Contains(firstResult, "# sandcutter:plugin:test-plugin:start") {
+	if !strings.Contains(firstResult, "# sandcatter:plugin:test-plugin:start") {
 		t.Error("Expected start marker to be present")
 	}
-	if !strings.Contains(firstResult, "# sandcutter:plugin:test-plugin:end") {
+	if !strings.Contains(firstResult, "# sandcatter:plugin:test-plugin:end") {
 		t.Error("Expected end marker to be present")
 	}
 }
@@ -192,16 +192,16 @@ RUN apt-get update \
 	result := df.GetContent()
 
 	// Verify both sets of markers are present
-	if !strings.Contains(result, "# sandcutter:plugin:plugin-one:start") {
+	if !strings.Contains(result, "# sandcatter:plugin:plugin-one:start") {
 		t.Error("Expected plugin-one start marker to be present")
 	}
-	if !strings.Contains(result, "# sandcutter:plugin:plugin-one:end") {
+	if !strings.Contains(result, "# sandcatter:plugin:plugin-one:end") {
 		t.Error("Expected plugin-one end marker to be present")
 	}
-	if !strings.Contains(result, "# sandcutter:plugin:plugin-two:start") {
+	if !strings.Contains(result, "# sandcatter:plugin:plugin-two:start") {
 		t.Error("Expected plugin-two start marker to be present")
 	}
-	if !strings.Contains(result, "# sandcutter:plugin:plugin-two:end") {
+	if !strings.Contains(result, "# sandcatter:plugin:plugin-two:end") {
 		t.Error("Expected plugin-two end marker to be present")
 	}
 
@@ -283,8 +283,8 @@ USER vscode`
 	if !strings.Contains(got, "LANG=en_US.UTF-8") {
 		t.Error("Expected LANG environment variable to be set")
 	}
-	if !strings.Contains(got, "sandcutter:managed") {
-		t.Error("Expected sandcutter:managed marker")
+	if !strings.Contains(got, "sandcatter:managed") {
+		t.Error("Expected sandcatter:managed marker")
 	}
 }
 
@@ -294,7 +294,7 @@ RUN apt-get update \
     && apt-get install -y locales \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure locale for UTF-8 support (sandcutter:managed)
+# Configure locale for UTF-8 support (sandcatter:managed)
 RUN sed -i '/en_US\.UTF-8/s/^# //g' /etc/locale.gen \
     && locale-gen
 ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
@@ -361,6 +361,82 @@ ENTRYPOINT ["/bin/sh"]`
 	}
 }
 
+func TestAddUserRunCommands(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+USER vscode
+RUN mise use -g node@lts
+USER root
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	err = df.AddUserRunCommands([]string{"bash -c 'curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer | bash && source /home/vscode/.gvm/scripts/gvm && gvm install go1.25.7 -B && gvm use go1.25.7 --default && go install golang.org/x/tools/gopls@latest'"}, "golsp")
+	if err != nil {
+		t.Fatalf("AddUserRunCommands failed: %v", err)
+	}
+
+	got := df.GetContent()
+
+	want := `FROM debian
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+USER vscode
+RUN mise use -g node@lts
+
+# sandcatter:run:golsp:start
+RUN bash -c 'curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer | bash && source /home/vscode/.gvm/scripts/gvm && gvm install go1.25.7 -B && gvm use go1.25.7 --default && go install golang.org/x/tools/gopls@latest'
+# sandcatter:run:golsp:end
+USER root
+ENTRYPOINT ["/bin/sh"]
+`
+
+	if got != want {
+		t.Errorf("AddUserRunCommands() mismatch:\nGot:\n%s\nWant:\n%s", got, want)
+	}
+}
+
+func TestAddUserRunCommandsIdempotency(t *testing.T) {
+	input := `FROM debian
+USER vscode
+RUN mise use -g node@lts
+USER root
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	commands := []string{"bash -c 'curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer | bash && source /home/vscode/.gvm/scripts/gvm && gvm install go1.25.7 -B && gvm use go1.25.7 --default'"}
+
+	err = df.AddUserRunCommands(commands, "golsp")
+	if err != nil {
+		t.Fatalf("AddUserRunCommands failed: %v", err)
+	}
+	firstResult := df.GetContent()
+
+	err = df.AddUserRunCommands(commands, "golsp")
+	if err != nil {
+		t.Fatalf("AddUserRunCommands failed on second run: %v", err)
+	}
+	secondResult := df.GetContent()
+
+	if firstResult != secondResult {
+		t.Errorf("AddUserRunCommands not idempotent:\nFirst:\n%s\nSecond:\n%s", firstResult, secondResult)
+	}
+}
+
 func TestAddRunCommands(t *testing.T) {
 	input := `FROM debian
 RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
@@ -386,10 +462,10 @@ ENTRYPOINT ["/bin/sh"]`
 	want := `FROM debian
 RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
 USER root
-# sandcutter:run:test-plugin:start
+# sandcatter:run:test-plugin:start
 RUN echo hello
 RUN echo world
-# sandcutter:run:test-plugin:end
+# sandcatter:run:test-plugin:end
 ENTRYPOINT ["/bin/sh"]
 `
 
@@ -435,7 +511,7 @@ func TestAddRunCommandsBeforeCopy(t *testing.T) {
 	input := `FROM debian
 RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
 USER root
-# sandcutter:file:/etc/skel/.tmux.conf
+# sandcatter:file:/etc/skel/.tmux.conf
 COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
 ENTRYPOINT ["/bin/sh"]`
 
@@ -458,11 +534,11 @@ ENTRYPOINT ["/bin/sh"]`
 	want := `FROM debian
 RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
 USER root
-# sandcutter:run:test-plugin:start
+# sandcatter:run:test-plugin:start
 RUN echo hello
 RUN echo world
-# sandcutter:run:test-plugin:end
-# sandcutter:file:/etc/skel/.tmux.conf
+# sandcatter:run:test-plugin:end
+# sandcatter:file:/etc/skel/.tmux.conf
 COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
 ENTRYPOINT ["/bin/sh"]
 `
@@ -476,10 +552,10 @@ func TestAddDockerEnv(t *testing.T) {
 	input := `FROM debian
 RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
 USER root
-# sandcutter:run:claude-tools:start
+# sandcatter:run:claude-tools:start
 RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-# sandcutter:run:claude-tools:end
-# sandcutter:file:/etc/skel/.tmux.conf
+# sandcatter:run:claude-tools:end
+# sandcatter:file:/etc/skel/.tmux.conf
 COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
 ENTRYPOINT ["/bin/sh"]`
 
@@ -503,20 +579,20 @@ ENTRYPOINT ["/bin/sh"]`
 	got := df.GetContent()
 
 	// ENV block should appear after the run block end marker
-	if !strings.Contains(got, "# sandcutter:env:claude-tools:start") {
+	if !strings.Contains(got, "# sandcatter:env:claude-tools:start") {
 		t.Error("Expected env start marker to be present")
 	}
 	if !strings.Contains(got, "ENV PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH") {
 		t.Error("Expected ENV PATH instruction to be present")
 	}
-	if !strings.Contains(got, "# sandcutter:env:claude-tools:end") {
+	if !strings.Contains(got, "# sandcatter:env:claude-tools:end") {
 		t.Error("Expected env end marker to be present")
 	}
 
 	// ENV should be after run:end and before file marker
-	runEndIdx := strings.Index(got, "# sandcutter:run:claude-tools:end")
-	envStartIdx := strings.Index(got, "# sandcutter:env:claude-tools:start")
-	fileIdx := strings.Index(got, "# sandcutter:file:")
+	runEndIdx := strings.Index(got, "# sandcatter:run:claude-tools:end")
+	envStartIdx := strings.Index(got, "# sandcatter:env:claude-tools:start")
+	fileIdx := strings.Index(got, "# sandcatter:file:")
 	if envStartIdx < runEndIdx {
 		t.Error("ENV block should be after run block")
 	}
@@ -528,9 +604,9 @@ ENTRYPOINT ["/bin/sh"]`
 func TestAddDockerEnvIdempotency(t *testing.T) {
 	input := `FROM debian
 USER root
-# sandcutter:run:claude-tools:start
+# sandcatter:run:claude-tools:start
 RUN echo hello
-# sandcutter:run:claude-tools:end
+# sandcatter:run:claude-tools:end
 ENTRYPOINT ["/bin/sh"]`
 
 	fs := afero.NewMemMapFs()
@@ -568,26 +644,26 @@ func TestScanPlugins(t *testing.T) {
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         vim \
-        # sandcutter:plugin:tmux:start \
+        # sandcatter:plugin:tmux:start \
         tmux \
-        # sandcutter:plugin:tmux:end \
-        # sandcutter:plugin:claude-tools:start \
+        # sandcatter:plugin:tmux:end \
+        # sandcatter:plugin:claude-tools:start \
         build-essential \
-        # sandcutter:plugin:claude-tools:end \
+        # sandcatter:plugin:claude-tools:end \
     && rm -rf /var/lib/apt/lists/*
 USER root
-# sandcutter:run:tmux:start
+# sandcatter:run:tmux:start
 RUN echo "tmux setup"
-# sandcutter:run:tmux:end
-# sandcutter:run:claude-tools:start
+# sandcatter:run:tmux:end
+# sandcatter:run:claude-tools:start
 RUN curl -fsSL https://example.com/install.sh | bash
-# sandcutter:run:claude-tools:end
-# sandcutter:env:claude-tools:start
+# sandcatter:run:claude-tools:end
+# sandcatter:env:claude-tools:start
 ENV PATH=/home/linuxbrew/.linuxbrew/bin:$PATH
-# sandcutter:env:claude-tools:end
-# sandcutter:file:/etc/skel/.tmux.conf
+# sandcatter:env:claude-tools:end
+# sandcatter:file:/etc/skel/.tmux.conf
 COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
-# sandcutter:file:/usr/local/bin/setup.sh
+# sandcatter:file:/usr/local/bin/setup.sh
 COPY --chmod=755 setup.sh /usr/local/bin/setup.sh
 ENTRYPOINT ["/bin/sh"]`
 
@@ -669,12 +745,12 @@ func TestRemovePluginPackages(t *testing.T) {
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         vim \
-        # sandcutter:plugin:tmux:start \
+        # sandcatter:plugin:tmux:start \
         tmux \
-        # sandcutter:plugin:tmux:end \
-        # sandcutter:plugin:claude-tools:start \
+        # sandcatter:plugin:tmux:end \
+        # sandcatter:plugin:claude-tools:start \
         build-essential \
-        # sandcutter:plugin:claude-tools:end \
+        # sandcatter:plugin:claude-tools:end \
     && rm -rf /var/lib/apt/lists/*`
 
 	fs := afero.NewMemMapFs()
@@ -695,9 +771,9 @@ RUN apt-get update \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         vim \
-        # sandcutter:plugin:claude-tools:start \
+        # sandcatter:plugin:claude-tools:start \
         build-essential \
-        # sandcutter:plugin:claude-tools:end \
+        # sandcatter:plugin:claude-tools:end \
     && rm -rf /var/lib/apt/lists/*
 `
 
@@ -706,7 +782,7 @@ RUN apt-get update \
 	}
 
 	// Verify claude-tools is still there
-	if !strings.Contains(got, "# sandcutter:plugin:claude-tools:start") {
+	if !strings.Contains(got, "# sandcatter:plugin:claude-tools:start") {
 		t.Error("Expected claude-tools plugin to remain")
 	}
 	if !strings.Contains(got, "build-essential") {
@@ -720,9 +796,9 @@ func TestRemovePluginPackagesLastBlock(t *testing.T) {
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         vim \
-        # sandcutter:plugin:tmux:start \
+        # sandcatter:plugin:tmux:start \
         tmux \
-        # sandcutter:plugin:tmux:end \
+        # sandcatter:plugin:tmux:end \
     && rm -rf /var/lib/apt/lists/*`
 
 	fs := afero.NewMemMapFs()
@@ -753,10 +829,10 @@ RUN apt-get update \
 func TestRemoveRunCommands(t *testing.T) {
 	input := `FROM debian
 USER root
-# sandcutter:run:test-plugin:start
+# sandcatter:run:test-plugin:start
 RUN echo hello
 RUN echo world
-# sandcutter:run:test-plugin:end
+# sandcatter:run:test-plugin:end
 ENTRYPOINT ["/bin/sh"]`
 
 	fs := afero.NewMemMapFs()
@@ -785,12 +861,12 @@ ENTRYPOINT ["/bin/sh"]
 func TestRemoveDockerEnv(t *testing.T) {
 	input := `FROM debian
 USER root
-# sandcutter:run:claude-tools:start
+# sandcatter:run:claude-tools:start
 RUN echo hello
-# sandcutter:run:claude-tools:end
-# sandcutter:env:claude-tools:start
+# sandcatter:run:claude-tools:end
+# sandcatter:env:claude-tools:start
 ENV PATH=/home/linuxbrew/.linuxbrew/bin:$PATH
-# sandcutter:env:claude-tools:end
+# sandcatter:env:claude-tools:end
 ENTRYPOINT ["/bin/sh"]`
 
 	fs := afero.NewMemMapFs()
@@ -808,9 +884,9 @@ ENTRYPOINT ["/bin/sh"]`
 
 	want := `FROM debian
 USER root
-# sandcutter:run:claude-tools:start
+# sandcatter:run:claude-tools:start
 RUN echo hello
-# sandcutter:run:claude-tools:end
+# sandcatter:run:claude-tools:end
 ENTRYPOINT ["/bin/sh"]
 `
 
@@ -822,7 +898,7 @@ ENTRYPOINT ["/bin/sh"]
 func TestRemoveCopyCommand(t *testing.T) {
 	input := `FROM debian
 USER root
-# sandcutter:file:/etc/skel/.tmux.conf
+# sandcatter:file:/etc/skel/.tmux.conf
 COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
 ENTRYPOINT ["/bin/sh"]`
 
@@ -849,10 +925,361 @@ ENTRYPOINT ["/bin/sh"]
 	}
 }
 
+func TestRemovePluginPackagesNonExistent(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends vim \
+    && rm -rf /var/lib/apt/lists/*`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	before := df.GetContent()
+	df.RemovePluginPackages("nonexistent")
+	after := df.GetContent()
+
+	if before != after {
+		t.Errorf("Removing non-existent plugin should not change content:\nBefore:\n%s\nAfter:\n%s", before, after)
+	}
+}
+
+func TestRemovePluginPackagesFirstBlock(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        vim \
+        # sandcatter:plugin:first:start \
+        pkg-a \
+        # sandcatter:plugin:first:end \
+        # sandcatter:plugin:second:start \
+        pkg-b \
+        # sandcatter:plugin:second:end \
+    && rm -rf /var/lib/apt/lists/*`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	df.RemovePluginPackages("first")
+
+	got := df.GetContent()
+
+	if strings.Contains(got, "pkg-a") {
+		t.Error("Expected pkg-a to be removed")
+	}
+	if !strings.Contains(got, "pkg-b") {
+		t.Error("Expected pkg-b to remain")
+	}
+	if !strings.Contains(got, "# sandcatter:plugin:second:start") {
+		t.Error("Expected second plugin block to remain")
+	}
+}
+
+func TestRemovePluginPackagesAllBlocks(t *testing.T) {
+	input := `FROM debian
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        vim \
+        # sandcatter:plugin:first:start \
+        pkg-a \
+        # sandcatter:plugin:first:end \
+        # sandcatter:plugin:second:start \
+        pkg-b \
+        # sandcatter:plugin:second:end \
+    && rm -rf /var/lib/apt/lists/*`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	df.RemovePluginPackages("first")
+	df.RemovePluginPackages("second")
+
+	got := df.GetContent()
+
+	want := `FROM debian
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        vim \
+    && rm -rf /var/lib/apt/lists/*
+`
+
+	if got != want {
+		t.Errorf("RemovePluginPackages all blocks mismatch:\nGot:\n%s\nWant:\n%s", got, want)
+	}
+}
+
+func TestRemoveRunCommandsNonExistent(t *testing.T) {
+	input := `FROM debian
+USER root
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	before := df.GetContent()
+	df.RemoveRunCommands("nonexistent")
+	after := df.GetContent()
+
+	if before != after {
+		t.Errorf("Removing non-existent run commands should not change content")
+	}
+}
+
+func TestRemoveRunCommandsKeepsOtherPlugins(t *testing.T) {
+	input := `FROM debian
+USER root
+# sandcatter:run:plugin-a:start
+RUN echo a
+# sandcatter:run:plugin-a:end
+# sandcatter:run:plugin-b:start
+RUN echo b
+# sandcatter:run:plugin-b:end
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	df.RemoveRunCommands("plugin-a")
+
+	got := df.GetContent()
+
+	if strings.Contains(got, "echo a") {
+		t.Error("Expected plugin-a run command to be removed")
+	}
+	if !strings.Contains(got, "echo b") {
+		t.Error("Expected plugin-b run command to remain")
+	}
+	if !strings.Contains(got, "# sandcatter:run:plugin-b:start") {
+		t.Error("Expected plugin-b markers to remain")
+	}
+}
+
+func TestRemoveDockerEnvNonExistent(t *testing.T) {
+	input := `FROM debian
+USER root
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	before := df.GetContent()
+	df.RemoveDockerEnv("nonexistent")
+	after := df.GetContent()
+
+	if before != after {
+		t.Errorf("Removing non-existent env should not change content")
+	}
+}
+
+func TestRemoveDockerEnvKeepsOtherPlugins(t *testing.T) {
+	input := `FROM debian
+USER root
+# sandcatter:env:plugin-a:start
+ENV FOO=bar
+# sandcatter:env:plugin-a:end
+# sandcatter:env:plugin-b:start
+ENV BAZ=qux
+# sandcatter:env:plugin-b:end
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	df.RemoveDockerEnv("plugin-a")
+
+	got := df.GetContent()
+
+	if strings.Contains(got, "FOO=bar") {
+		t.Error("Expected plugin-a env to be removed")
+	}
+	if !strings.Contains(got, "BAZ=qux") {
+		t.Error("Expected plugin-b env to remain")
+	}
+}
+
+func TestRemoveCopyCommandNonExistent(t *testing.T) {
+	input := `FROM debian
+USER root
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	before := df.GetContent()
+	df.RemoveCopyCommand("/nonexistent/path")
+	after := df.GetContent()
+
+	if before != after {
+		t.Errorf("Removing non-existent copy command should not change content")
+	}
+}
+
+func TestRemoveCopyCommandMarkerOnly(t *testing.T) {
+	// Edge case: marker exists but next line is not a COPY command
+	input := `FROM debian
+USER root
+# sandcatter:file:/etc/config
+ENV FOO=bar
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	df.RemoveCopyCommand("/etc/config")
+
+	got := df.GetContent()
+
+	// Marker should be removed, but ENV line should remain
+	if strings.Contains(got, "sandcatter:file:/etc/config") {
+		t.Error("Expected marker to be removed")
+	}
+	if !strings.Contains(got, "ENV FOO=bar") {
+		t.Error("Expected ENV line to be preserved when it's not a COPY")
+	}
+}
+
+func TestRemoveCopyCommandMultipleFiles(t *testing.T) {
+	input := `FROM debian
+USER root
+# sandcatter:file:/etc/config-a
+COPY --chmod=644 config-a /etc/config-a
+# sandcatter:file:/etc/config-b
+COPY --chmod=755 config-b /etc/config-b
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	df.RemoveCopyCommand("/etc/config-a")
+
+	got := df.GetContent()
+
+	if strings.Contains(got, "config-a") {
+		t.Error("Expected config-a COPY to be removed")
+	}
+	if !strings.Contains(got, "config-b") {
+		t.Error("Expected config-b COPY to remain")
+	}
+}
+
+func TestRemovePluginRoundTrip(t *testing.T) {
+	// Apply packages, run commands, and env — then remove; result should match original.
+	// Note: COPY round-trip is tested separately; AddCopyCommand inserts marker+COPY
+	// as a single line element which RemoveCopyCommand handles independently.
+	input := `FROM debian
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends vim \
+    && rm -rf /var/lib/apt/lists/*
+USER root
+ENTRYPOINT ["/bin/sh"]`
+
+	fs := afero.NewMemMapFs()
+	path := "/Dockerfile"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	df, err := LoadFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load Dockerfile: %v", err)
+	}
+
+	original := df.GetContent()
+
+	// Apply
+	err = df.AddAptPackages([]string{"tmux", "curl"}, "test-plugin")
+	if err != nil {
+		t.Fatalf("AddAptPackages failed: %v", err)
+	}
+	err = df.AddRunCommands([]string{"echo hello"}, "test-plugin")
+	if err != nil {
+		t.Fatalf("AddRunCommands failed: %v", err)
+	}
+	envVars := map[string]string{"PATH": "/custom:$PATH"}
+	err = df.AddDockerEnv(envVars, "test-plugin")
+	if err != nil {
+		t.Fatalf("AddDockerEnv failed: %v", err)
+	}
+
+	// Verify something was added
+	applied := df.GetContent()
+	if applied == original {
+		t.Fatal("Expected content to change after apply")
+	}
+
+	// Remove
+	df.RemovePluginPackages("test-plugin")
+	df.RemoveRunCommands("test-plugin")
+	df.RemoveDockerEnv("test-plugin")
+
+	restored := df.GetContent()
+
+	if restored != original {
+		t.Errorf("Round-trip failed — content differs after remove:\nOriginal:\n%s\nRestored:\n%s", original, restored)
+	}
+}
+
 func TestAddCopyCommandIdempotency(t *testing.T) {
 	input := `FROM debian
 USER root
-# sandcutter:file:/etc/skel/.tmux.conf
+# sandcatter:file:/etc/skel/.tmux.conf
 COPY --chmod=644 tmux.conf /etc/skel/.tmux.conf
 ENTRYPOINT ["/bin/sh"]`
 
@@ -902,9 +1329,9 @@ USER node`
 
 	want := `FROM debian
 RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
-# sandcutter:run:test-plugin:start
+# sandcatter:run:test-plugin:start
 RUN echo hello
-# sandcutter:run:test-plugin:end
+# sandcatter:run:test-plugin:end
 USER node
 `
 
@@ -971,11 +1398,11 @@ USER node`
 	got := df.GetContent()
 
 	// ENV should be inserted before USER node
-	if !strings.Contains(got, "# sandcutter:env:test-plugin:start") {
+	if !strings.Contains(got, "# sandcatter:env:test-plugin:start") {
 		t.Error("Expected env start marker to be present")
 	}
 
-	envIdx := strings.Index(got, "# sandcutter:env:test-plugin:start")
+	envIdx := strings.Index(got, "# sandcatter:env:test-plugin:start")
 	userIdx := strings.LastIndex(got, "USER node")
 	if envIdx > userIdx {
 		t.Error("ENV block should be before final USER line")

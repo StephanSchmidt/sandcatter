@@ -255,6 +255,47 @@ func (d *Dockerfile) AddLocaleSetup(locale string) error {
 	return nil
 }
 
+// AddUserRunCommands adds RUN commands in the USER vscode section (before USER root).
+// This is used for commands that need to run as the non-root user, e.g. gvm-based toolchain installs.
+func (d *Dockerfile) AddUserRunCommands(commands []string, pluginName string) error {
+	startMarker := fmt.Sprintf("# sandcatter:run:%s:start", pluginName)
+	endMarker := fmt.Sprintf("# sandcatter:run:%s:end", pluginName)
+
+	// Check if already exists (idempotent)
+	for _, line := range d.Lines {
+		if strings.Contains(line, startMarker) {
+			return nil
+		}
+	}
+
+	// Find "USER root" and insert just before it
+	insertIdx := -1
+	for i, line := range d.Lines {
+		if strings.TrimSpace(line) == "USER root" {
+			insertIdx = i
+			break
+		}
+	}
+
+	if insertIdx == -1 {
+		return fmt.Errorf("could not find USER root in Dockerfile")
+	}
+
+	// Build lines to insert
+	var linesToInsert []string
+	linesToInsert = append(linesToInsert, "")
+	linesToInsert = append(linesToInsert, startMarker)
+	for _, cmd := range commands {
+		linesToInsert = append(linesToInsert, fmt.Sprintf("RUN %s", cmd))
+	}
+	linesToInsert = append(linesToInsert, endMarker)
+
+	// Insert
+	d.Lines = append(d.Lines[:insertIdx], append(linesToInsert, d.Lines[insertIdx:]...)...)
+
+	return nil
+}
+
 // AddRunCommands adds RUN commands before file COPY markers and ENTRYPOINT
 func (d *Dockerfile) AddRunCommands(commands []string, pluginName string) error {
 	startMarker := fmt.Sprintf("# sandcatter:run:%s:start", pluginName)

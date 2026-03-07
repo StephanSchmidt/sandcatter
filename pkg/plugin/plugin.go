@@ -10,7 +10,7 @@ import (
 	"github.com/StephanSchmidt/sandcatter/pkg/builtin"
 )
 
-// Plugin represents a sandcutter plugin configuration
+// Plugin represents a sandcatter plugin configuration
 type Plugin struct {
 	Name           string            `json:"name"`
 	Version        string            `json:"version"`
@@ -21,9 +21,12 @@ type Plugin struct {
 	Files          []FileMapping     `json:"files"`
 	ComposeEnv     map[string]string `json:"compose_env"`
 	RunCommands    []string          `json:"run_commands"`
+	RunAs          string            `json:"run_as,omitempty"`
 	DockerEnv      map[string]string `json:"env"`
 	ComposeCommand string            `json:"compose_command,omitempty"`
-	LocaleSetup    *LocaleConfig     `json:"locale_setup"`
+	ComposeVolumes     []string          `json:"compose_volumes"`
+	PostInstallMessage string            `json:"post_install_message,omitempty"`
+	LocaleSetup        *LocaleConfig     `json:"locale_setup"`
 
 	// Internal fields
 	pluginDir string

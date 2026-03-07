@@ -360,6 +360,319 @@ services:
 	}
 }
 
+func TestRemoveEnvironmentVariablesNonExistent(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    environment:
+      - EXISTING_VAR=value
+    network_mode: "service:wg-client"`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	before := cf.GetContent()
+
+	err = cf.RemoveEnvironmentVariables(map[string]string{"NONEXISTENT": "value"})
+	if err != nil {
+		t.Fatalf("RemoveEnvironmentVariables failed: %v", err)
+	}
+
+	after := cf.GetContent()
+
+	if before != after {
+		t.Error("Removing non-existent env var should not change content")
+	}
+}
+
+func TestRemoveEnvironmentVariablesEmpty(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    environment:
+      - TERM=xterm
+    network_mode: "service:wg-client"`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	before := cf.GetContent()
+
+	err = cf.RemoveEnvironmentVariables(map[string]string{})
+	if err != nil {
+		t.Fatalf("RemoveEnvironmentVariables failed: %v", err)
+	}
+
+	after := cf.GetContent()
+
+	if before != after {
+		t.Error("Removing empty env map should not change content")
+	}
+}
+
+func TestRemoveEnvironmentVariablesAllVars(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    environment:
+      - TERM=xterm-256color
+      - EDITOR=vim
+    network_mode: "service:wg-client"`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	envVars := map[string]string{
+		"TERM":   "xterm-256color",
+		"EDITOR": "vim",
+	}
+
+	err = cf.RemoveEnvironmentVariables(envVars)
+	if err != nil {
+		t.Fatalf("RemoveEnvironmentVariables failed: %v", err)
+	}
+
+	got := cf.GetContent()
+
+	if strings.Contains(got, "TERM") {
+		t.Error("Expected TERM to be removed")
+	}
+	if strings.Contains(got, "EDITOR") {
+		t.Error("Expected EDITOR to be removed")
+	}
+	// environment: header should still be there (we only remove entries)
+	if !strings.Contains(got, "environment:") {
+		t.Error("Expected environment section header to remain")
+	}
+}
+
+func TestRemoveComposeCommandNonExistent(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    network_mode: "service:wg-client"`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	before := cf.GetContent()
+
+	err = cf.RemoveComposeCommand()
+	if err != nil {
+		t.Fatalf("RemoveComposeCommand failed: %v", err)
+	}
+
+	after := cf.GetContent()
+
+	if before != after {
+		t.Error("Removing command when none exists should not change content")
+	}
+}
+
+func TestRemoveVolumes(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    volumes:
+      - ..:/workspaces/test:cached
+      - ${HOME}/.claude/plugins:/home/vscode/.claude/plugins
+    network_mode: "service:wg-client"`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	err = cf.RemoveVolumes([]string{"${HOME}/.claude/plugins:/home/vscode/.claude/plugins"})
+	if err != nil {
+		t.Fatalf("RemoveVolumes failed: %v", err)
+	}
+
+	got := cf.GetContent()
+
+	if strings.Contains(got, ".claude/plugins") {
+		t.Error("Expected plugin volume to be removed")
+	}
+	if !strings.Contains(got, "..:/workspaces/test:cached") {
+		t.Error("Expected workspace volume to remain")
+	}
+}
+
+func TestRemoveVolumesNonExistent(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    volumes:
+      - ..:/workspaces/test:cached
+    network_mode: "service:wg-client"`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	before := cf.GetContent()
+
+	err = cf.RemoveVolumes([]string{"/nonexistent:/nonexistent"})
+	if err != nil {
+		t.Fatalf("RemoveVolumes failed: %v", err)
+	}
+
+	after := cf.GetContent()
+
+	if before != after {
+		t.Error("Removing non-existent volume should not change content")
+	}
+}
+
+func TestRemoveVolumesEmpty(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    volumes:
+      - ..:/workspaces/test:cached`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	before := cf.GetContent()
+
+	err = cf.RemoveVolumes([]string{})
+	if err != nil {
+		t.Fatalf("RemoveVolumes failed: %v", err)
+	}
+
+	after := cf.GetContent()
+
+	if before != after {
+		t.Error("Removing empty volumes list should not change content")
+	}
+}
+
+func TestComposeRemoveRoundTrip(t *testing.T) {
+	input := `name: test-project
+
+services:
+  app:
+    build:
+      context: .
+    volumes:
+      - ..:/workspaces/test:cached
+    command: sleep infinity`
+
+	fs := afero.NewMemMapFs()
+	path := "/compose.yml"
+	afero.WriteFile(fs, path, []byte(input), 0644)
+
+	cf, err := LoadComposeFs(fs, path)
+	if err != nil {
+		t.Fatalf("Failed to load compose file: %v", err)
+	}
+
+	// Apply
+	err = cf.AddEnvironmentVariables(map[string]string{"TERM": "xterm-256color"})
+	if err != nil {
+		t.Fatalf("AddEnvironmentVariables failed: %v", err)
+	}
+	err = cf.AddVolumes([]string{"${HOME}/.config:/home/vscode/.config"})
+	if err != nil {
+		t.Fatalf("AddVolumes failed: %v", err)
+	}
+
+	applied := cf.GetContent()
+	if !strings.Contains(applied, "TERM=xterm-256color") {
+		t.Fatal("Expected TERM to be added")
+	}
+	if !strings.Contains(applied, ".config") {
+		t.Fatal("Expected .config volume to be added")
+	}
+
+	// Remove
+	err = cf.RemoveEnvironmentVariables(map[string]string{"TERM": "xterm-256color"})
+	if err != nil {
+		t.Fatalf("RemoveEnvironmentVariables failed: %v", err)
+	}
+	err = cf.RemoveVolumes([]string{"${HOME}/.config:/home/vscode/.config"})
+	if err != nil {
+		t.Fatalf("RemoveVolumes failed: %v", err)
+	}
+
+	restored := cf.GetContent()
+
+	if strings.Contains(restored, "TERM") {
+		t.Error("Expected TERM to be removed after round-trip")
+	}
+	if strings.Contains(restored, ".config") {
+		t.Error("Expected .config volume to be removed after round-trip")
+	}
+	// Original content should still be intact
+	if !strings.Contains(restored, "..:/workspaces/test:cached") {
+		t.Error("Expected original volume to remain")
+	}
+	if !strings.Contains(restored, "command: sleep infinity") {
+		t.Error("Expected original command to remain")
+	}
+}
+
 func TestAddEnvironmentVariablesEmpty(t *testing.T) {
 	input := `name: test-project
 
