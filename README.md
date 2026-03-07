@@ -102,59 +102,7 @@ User plugins can override built-in plugins by using the same name.
 
 ## Creating Custom Plugins
 
-Plugins are stored in the `plugins/` directory. Each plugin has:
-
-```
-plugins/
-└── myplugin/
-    ├── plugin.json       # Plugin manifest
-    └── files/            # Files to copy into container
-        └── config.conf
-```
-
-### Plugin Manifest (plugin.json)
-
-```json
-{
-  "name": "myplugin",
-  "version": "1.0.0",
-  "description": "My custom plugin",
-  "apt_packages": ["package1", "package2"],
-  "fonts": ["fonts-dejavu"],
-  "locale_packages": ["locales"],
-  "files": [
-    {
-      "source": "files/config.conf",
-      "destination": "/etc/skel/.config.conf",
-      "chmod": "644"
-    }
-  ],
-  "compose_env": {
-    "MY_VAR": "value"
-  },
-  "locale_setup": {
-    "locale": "en_US.UTF-8",
-    "generate": true
-  }
-}
-```
-
-### Plugin Fields
-
-- **name**: Plugin identifier (required)
-- **version**: Semantic version (required)
-- **description**: Human-readable description (required)
-- **apt_packages**: Debian packages to install
-- **fonts**: Font packages to install
-- **locale_packages**: Locale packages (usually `["locales"]`)
-- **files**: Files to copy from plugin to container
-  - **source**: Path relative to plugin directory
-  - **destination**: Absolute path in container
-  - **chmod**: File permissions (e.g., "644", "755")
-- **compose_env**: Environment variables to add to docker-compose.yml (only applied when a compose file exists)
-- **locale_setup**: Locale configuration
-  - **locale**: Locale name (e.g., "en_US.UTF-8")
-  - **generate**: Whether to run locale-gen
+See [PLUGINS.md](PLUGINS.md) for the full guide on creating custom plugins, including manifest fields, examples, best practices, and troubleshooting.
 
 ## How It Works
 
