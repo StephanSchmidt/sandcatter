@@ -168,59 +168,6 @@ sandcatter/
     └── .gitkeep                     # Keeps directory tracked
 ```
 
-## Development
-
-### Running Tests
-
-```bash
-# Run all unit tests
-make test
-
-# Run tests with coverage
-make test-coverage
-
-# Run integration tests
-make integration-test
-
-# Run all checks (fmt, vet, test)
-make check
-```
-
-### Building
-
-```bash
-# Build the binary
-make build
-
-# Or use go directly
-go build -o sandcatter .
-```
-
-### Available Make Targets
-
-Run `make help` to see all available targets:
-
-- `make build` - Build the binary
-- `make test` - Run all unit tests
-- `make test-coverage` - Generate coverage report
-- `make integration-test` - Run end-to-end tests with fresh sandcat
-- `make clean` - Clean build artifacts
-- `make install` - Install to $GOPATH/bin
-- `make check` - Run fmt, vet, and tests
-- `make fmt` - Format code
-- `make vet` - Run go vet
-
-### Adding a New Plugin
-
-1. Create plugin directory: `mkdir -p plugins/myplugin/files`
-2. Create `plugin.json` manifest
-3. Add configuration files to `files/` directory
-4. Test with: `sandcatter apply ../my-devcontainer myplugin --dry-run`
-
-## Reference Implementation
-
-The built-in tmux plugin serves as the reference implementation for how plugins should work.
-
 ## License
 
 MIT
